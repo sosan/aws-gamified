@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS Lambda · Quiz Gamificado</title>
+<style>
+  :root{
+    --bg-0:#050d1a;
+    --bg-1:#0b1729;
+    --bg-2:#12223a;
+    --card:#16264a;
+    --card-2:#1b3057;
+    --edge:#274470;
+    --text:#eaf1fb;
+    --muted:#b7c5dd;
+    --soft:#7e8da7;
+    --orange:#FF9900;
+    --orange-soft:#ffb84d;
+    --teal:#2EC5BE;
+    --blue:#53A8FB;
+    --purple:#A36BFF;
+    --green:#6BC853;
+    --pink:#F06292;
+    --red:#ff5a5a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:'Noto Sans','DejaVu Sans',system-ui,Arial,sans-serif;
+    background:
+      radial-gradient(ellipse 900px 600px at 88% -8%, rgba(255,153,0,.14) 0%, transparent 60%),
+      radial-gradient(ellipse 1000px 650px at 4% 108%, rgba(46,197,190,.12) 0%, transparent 60%),
+      radial-gradient(ellipse 1200px 800px at 50% 45%, var(--bg-1) 0%, var(--bg-0) 100%);
+    background-attachment:fixed;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    padding:24px 16px;
+    position:relative;
+  }
+  body::before{
+    content:"";position:absolute;inset:0;
+    background-image:radial-gradient(rgba(255,255,255,.045) 1.2px,transparent 1.2px);
+    background-size:32px 32px;
+    pointer-events:none;
+  }
+
+  #app{width:100%;max-width:980px;position:relative;z-index:1}
+
+  /* ===== shared ===== */
+  .card{
+    background:linear-gradient(168deg, var(--card) 0%, var(--bg-2) 100%);
+    border:1px solid var(--edge);
+    border-radius:22px;
+    padding:34px 38px;
+    box-shadow:0 30px 80px rgba(0,0,0,.45);
+  }
+  .btn{
+    border:none;cursor:pointer;font-family:inherit;
+    border-radius:14px;padding:16px 30px;
+    font-size:19px;font-weight:800;letter-spacing:.4px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);
+    color:#fff;transition:transform .15s, box-shadow .15s, background .15s;
+  }
+  .btn:hover{transform:translateY(-2px)}
+  .btn:active{transform:translateY(0) scale(.98)}
+  .btn-primary{background:linear-gradient(135deg,var(--orange),#ff5a00);border:none;color:#241200;box-shadow:0 10px 34px rgba(255,153,0,.35)}
+  .btn-primary:hover{box-shadow:0 14px 44px rgba(255,153,0,.5)}
+  .btn-ghost{background:transparent}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+  /* ===== HOME ===== */
+  .home{text-align:center}
+  .logo{
+    width:130px;height:130px;margin:0 auto 22px;border-radius:32px;
+    display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 30% 25%, #1b3057, #0e1a30 70%);
+    border:2px solid var(--orange);
+    box-shadow:0 0 60px rgba(255,153,0,.35), inset 0 0 40px rgba(255,153,0,.08);
+    font-size:84px;font-style:italic;font-weight:800;color:var(--orange);
+  }
+  .home h1{font-size:52px;font-weight:800;letter-spacing:3px;color:#fff}
+  .home h1 .lam{color:var(--orange);font-style:italic;margin-left:6px}
+  .home .tagline{color:var(--muted);font-size:20px;margin-top:8px;font-weight:600;letter-spacing:.6px}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:30px}
+  .mode{
+    border:1.5px solid var(--edge);border-radius:18px;padding:24px 18px;
+    background:rgba(255,255,255,.035);cursor:pointer;text-align:left;
+    transition:transform .18s, border-color .18s, box-shadow .18s;position:relative;overflow:hidden;
+  }
+  .mode:hover{transform:translateY(-4px);border-color:rgba(255,153,0,.5);box-shadow:0 14px 40px rgba(0,0,0,.35)}
+  .mode .ico{font-size:38px;margin-bottom:12px}
+  .mode h3{font-size:22px;font-weight:800;color:#fff}
+  .mode p{font-size:16px;color:var(--muted);line-height:1.4;margin-top:6px;font-weight:500}
+  .mode .badge{
+    position:absolute;top:14px;right:14px;font-size:12px;font-weight:800;
+    background:rgba(255,153,0,.18);color:var(--orange-soft);
+    border:1px solid rgba(255,153,0,.35);border-radius:999px;padding:3px 10px;letter-spacing:1px;
+  }
+  .topics{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:26px}
+  .topic-chip{
+    border:1px solid var(--edge);background:rgba(255,255,255,.04);color:var(--muted);
+    border-radius:999px;padding:9px 18px;font-size:15px;font-weight:700;cursor:pointer;
+    transition:all .15s;
+  }
+  .topic-chip:hover{color:#fff;border-color:rgba(255,255,255,.3)}
+  .topic-chip.on{background:var(--orange);border-color:var(--orange);color:#241200;box-shadow:0 6px 20px rgba(255,153,0,.35)}
+  .home .foot{display:flex;justify-content:space-between;align-items:center;margin-top:28px;font-size:15px;color:var(--soft)}
+  .hs{color:var(--orange-soft);font-weight:800}
+
+  /* ===== QUIZ HEADER ===== */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .stat{
+    display:flex;align-items:center;gap:10px;
+    background:rgba(255,255,255,.05);border:1px solid var(--edge);
+    border-radius:12px;padding:8px 16px;font-size:17px;font-weight:800;
+  }
+  .stat .ico{font-size:20px}
+  .stat.score{color:var(--orange-soft)}
+  .stat.lives .heart{font-size:19px}
+  .stat.lives .heart.off{opacity:.22;filter:grayscale(1)}
+  .stat.timer{color:#ffd9a8;min-width:96px;justify-content:center}
+  .progress{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:20px}
+  .progress .fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--orange),#ff5a00);transition:width .4s ease;width:0}
+
+  /* ===== QUESTION ===== */
+  .qmeta{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .qchip{
+    font-size:13px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+    border-radius:999px;padding:5px 14px;
+  }
+  .qchip.c-orange{background:rgba(255,153,0,.15);color:var(--orange-soft);border:1px solid rgba(255,153,0,.35)}
+  .qchip.c-teal{background:rgba(46,197,190,.15);color:#9ff0ea;border:1px solid rgba(46,197,190,.35)}
+  .qchip.c-blue{background:rgba(83,168,251,.15);color:#a8d4ff;border:1px solid rgba(83,168,251,.35)}
+  .qchip.c-purple{background:rgba(163,107,255,.15);color:#cdb5ff;border:1px solid rgba(163,107,255,.35)}
+  .qchip.c-green{background:rgba(107,200,83,.15);color:#b5e8a0;border:1px solid rgba(107,200,83,.35)}
+  .qnum{color:var(--soft);font-size:15px;font-weight:700;letter-spacing:1px}
+  .q{font-size:26px;font-weight:700;line-height:1.35;color:#fff;margin-bottom:22px}
+  .q code{
+    font-family:'DejaVu Sans Mono',monospace;font-size:22px;
+    background:rgba(255,255,255,.09);padding:2px 9px;border-radius:6px;color:#ffd9a8;
+  }
+  .opts{display:flex;flex-direction:column;gap:12px}
+  .opt{
+    display:flex;align-items:center;gap:16px;text-align:left;cursor:pointer;
+    background:rgba(255,255,255,.045);border:1.5px solid rgba(255,255,255,.12);
+    border-radius:14px;padding:15px 20px;font-size:19px;color:var(--text);font-weight:600;
+    transition:all .16s;font-family:inherit;line-height:1.35;
+  }
+  .opt:hover:not(:disabled){border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.08);transform:translateX(4px)}
+  .opt .letter{
+    width:38px;height:38px;flex-shrink:0;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.07);font-weight:800;font-size:17px;color:var(--muted);
+    border:1px solid rgba(255,255,255,.12);
+  }
+  .opt.correct{
+    border-color:var(--green);background:rgba(107,200,83,.16);
+    box-shadow:0 0 34px rgba(107,200,83,.18);
+    animation:pop .35s ease;
+  }
+  .opt.correct .letter{background:var(--green);color:#06101f;border-color:var(--green)}
+  .opt.wrong{
+    border-color:var(--red);background:rgba(255,90,90,.13);
+    animation:shake .4s ease;
+  }
+  .opt.wrong .letter{background:var(--red);color:#fff;border-color:var(--red)}
+  .opt:disabled{cursor:default}
+  .opt.dim{opacity:.45}
+  @keyframes pop{0%{transform:scale(.97)}50%{transform:scale(1.02)}100%{transform:scale(1)}}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+
+  /* feedback */
+  .feedback{
+    margin-top:18px;border-radius:14px;padding:16px 22px;
+    display:none;align-items:flex-start;gap:14px;font-size:17px;line-height:1.45;
+  }
+  .feedback .big{font-size:30px;flex-shrink:0;margin-top:2px}
+  .feedback b{color:#fff}
+  .feedback.ok{display:flex;background:rgba(107,200,83,.12);border:1px solid rgba(107,200,83,.35)}
+  .feedback.bad{display:flex;background:rgba(255,90,90,.1);border:1px solid rgba(255,90,90,.3)}
+  .feedback .gains{margin-left:auto;text-align:right;flex-shrink:0;color:var(--orange-soft);font-weight:800;font-size:16px}
+  .next-row{display:flex;justify-content:space-between;align-items:center;margin-top:22px;gap:14px}
+
+  /* ===== RESULT ===== */
+  .result{text-align:center}
+  .r-circle{
+    width:210px;height:210px;border-radius:50%;margin:6px auto 26px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    background:radial-gradient(circle at 30% 25%, #ffcf80 0%, var(--orange) 40%, #b86a00 100%);
+    box-shadow:0 20px 70px rgba(255,153,0,.35), inset 0 2px 0 rgba(255,255,255,.5);
+    color:#241200;
+  }
+  .r-circle .pct{font-size:64px;font-weight:800;line-height:1}
+  .r-circle .lbl{font-size:19px;font-weight:800;letter-spacing:2px;text-transform:uppercase}
+  .result h2{font-size:44px;font-weight:800;color:#fff;letter-spacing:.5px}
+  .rank-line{font-size:22px;color:var(--orange-soft);font-weight:800;margin-top:6px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:30px 0}
+  .stat-box{
+    background:rgba(255,255,255,.045);border:1px solid var(--edge);border-radius:14px;
+    padding:16px 10px;
+  }
+  .stat-box .n{font-size:30px;font-weight:800;color:var(--orange)}
+  .stat-box .l{font-size:14px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-top:2px}
+  .best{font-size:15px;color:var(--soft);margin-bottom:22px}
+  .best b{color:var(--orange-soft)}
+  .result .actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+  /* confetti canvas */
+  #confetti{position:fixed;inset:0;pointer-events:none;z-index:99}
+
+  footer{
+    text-align:center;color:var(--soft);font-size:14px;margin-top:26px;letter-spacing:.5px;
+  }
+  footer b{color:#fff;font-weight:800}
+  footer .aws{color:var(--orange);font-weight:800}
+
+  @media (max-width:640px){
+    .modes{grid-template-columns:1fr}
+    .q{font-size:20px}
+    .opts .opt{font-size:16px}
+    .card{padding:24px 18px}
+    .stats{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+<div id="app"></div>
+
+<script>
+/* ================= CONFIG & DATA ================= */
+const T_COLORS = {
+  "Introducción":"c-orange","Límites":"c-teal","Concurrencia":"c-orange","Invocación":"c-blue",
+  "Seguridad":"c-green","Observabilidad":"c-blue","Layers":"c-purple","Microcontenedores":"c-teal",
+  "Lambda@Edge":"c-green","Serverless":"c-orange","Cold starts":"c-blue","Internals":"c-purple",
+  "Handler":"c-green","Versioning":"c-purple","Destinations":"c-teal"
+};
+const TOPICS = Object.keys(T_COLORS);
+
+const BANK = [
+/* Introducción */
+{t:"Introducción",q:"¿Qué es AWS Lambda?",o:["Un servicio de cómputo serverless basado en eventos","Una base de datos relacional gestionada","Un balanceador de carga para instancias EC2","Un CDN para servir contenido estático"],a:0,e:"Lambda ejecuta tu código en respuesta a eventos. AWS gestiona los servidores, el SO y el escalado por ti."},
+{t:"Introducción",q:"¿Qué problema resolvió Lambda respecto a EC2?",o:["La gestión de infraestructura: provisionar, parchear y escalar servidores","El coste de la red de entrega de contenidos","El cifrado de datos en reposo","El versionado de bases de datos"],a:0,e:"Con EC2 tú gestionas AMIs, seguridad y escalado. Lambda elimina ese overhead: solo subes el código."},
+{t:"Introducción",q:"¿Cómo factura Lambda a sus clientes?",o:["Por tiempo de cómputo en milisegundos","Por número de funciones creadas","Por GB almacenados al mes","Por horas de instancia activa"],a:0,e:"Pagas por requests y por GB-segundo (memoria × duración), redondeado al milisegundo."},
+{t:"Introducción",q:"¿En qué año se lanzó AWS Lambda?",o:["2014","2010","2016","2018"],a:0,e:"Lambda se presentó en la re:Invent de 2014 y llegó a disponibilidad general en 2015."},
+
+/* Límites */
+{t:"Límites",q:"¿Cuál es el timeout máximo de una función Lambda?",o:["15 minutos","1 minuto","5 minutos","1 hora"],a:0,e:"El límite clásico es 15 minutos (para invocaciones síncronas). Puedes configurarlo desde 1 segundo."},
+{t:"Límites",q:"¿Qué rango de memoria puedes asignar a una función?",o:["128 MB – 10 GB","64 MB – 1 GB","256 MB – 4 GB","512 MB – 2 GB"],a:0,e:"De 128 MB hasta 10.240 MB. La CPU asignada escala proporcionalmente con la memoria."},
+{t:"Límites",q:"¿Cuál es el payload máximo de una invocación síncrona?",o:["6 MB","256 KB","50 MB","1 MB"],a:0,e:"6 MB para invocaciones síncronas; 256 KB para asíncronas. La respuesta también puede llegar a 6 MB."},
+{t:"Límites",q:"¿Cuál es el tamaño máximo del ZIP desplegado directamente?",o:["50 MB","10 MB","250 MB","100 MB"],a:0,e:"50 MB comprimido directo (250 MB sin comprimir incluyendo capas; hasta 10 GB vía contenedor ECR)."},
+{t:"Límites",q:"¿Cuál es la concurrencia por defecto en cada región?",o:["1.000 ejecuciones simultáneas","100 ejecuciones simultáneas","10.000 ejecuciones simultáneas","Ilimitada"],a:0,e:"El pool regional por defecto es de 1.000. Puedes pedir una subida de cuota."},
+{t:"Límites",q:"¿Qué tamaño máximo tiene el almacenamiento efímero /tmp?",o:["10 GB","512 MB","1 GB","100 MB"],a:0,e:"De 512 MB a 10.240 MB. Es efímero: solo existe durante la vida del entorno."},
+
+/* Concurrencia */
+{t:"Concurrencia",q:"¿Qué devuelve Lambda cuando superas el límite de concurrencia?",o:["429 TooManyRequests","500 Internal Server Error","502 Bad Gateway","403 Forbidden"],a:0,e:"Throttle = HTTP 429. En invocaciones asíncronas se reintenta automáticamente con backoff."},
+{t:"Concurrencia",q:"¿Qué garantiza la concurrencia reservada (Reserved Concurrency)?",o:["Un techo fijo de ejecuciones simultáneas para una función","Cero cold starts siempre","Acceso prioritario a la CPU","Más memoria para la función"],a:0,e:"Reserved fija un límite superior por función y la aísla del throttling causado por otras funciones."},
+{t:"Concurrencia",q:"¿Para qué sirve Provisioned Concurrency?",o:["Inicializar entornos calientes y eliminar cold starts","Limitar el coste mensual","Enrutar tráfico entre versiones","Cifrar las variables de entorno"],a:0,e:"Mantiene N entornos preinicializados y listos para responder en milisegundos. Cuesta GB-s aunque no haya tráfico."},
+{t:"Concurrencia",q:"¿Quién comparte el pool regional de 1.000 ejecuciones?",o:["Todas las funciones Lambda de tu cuenta en esa región","Solo las funciones de un mismo VPC","Todas las cuentas de AWS del planeta","Solo las funciones con Provisioned"],a:0,e:"El pool se reparte entre las funciones no reservadas de tu cuenta en cada región."},
+
+/* Invocación */
+{t:"Invocación",q:"¿Qué tipo de invocación espera el resultado en la respuesta HTTP?",o:["Síncrona (RequestResponse)","Asíncrona (Event)","Poll-based","Ninguna de las anteriores"],a:0,e:"La invocación síncrona bloquea hasta que la función termina. La usan API Gateway, ALB y el SDK."},
+{t:"Invocación",q:"¿Cuál es un ejemplo de invocación asíncrona?",o:["Un objeto subido a S3","Una llamada directa al SDK","Una petición de API Gateway","Un request del ALB"],a:0,e:"S3, SNS y EventBridge invocan en modo asíncrono: Lambda encola el evento y responde de inmediato."},
+{t:"Invocación",q:"¿Cuántas veces reintenta Lambda una invocación asíncrona fallida?",o:["2 veces (3 intentos en total)","0 veces","5 veces","Infinitas veces"],a:0,e:"Dos reintentos con backoff exponencial. Tras fallar, puedes enviar el error a Destinations."},
+{t:"Invocación",q:"¿Qué fuentes usan invocación poll-based?",o:["SQS, DynamoDB Streams y Kinesis","API Gateway y ALB","S3 y SNS","CloudFront y Route 53"],a:0,e:"Lambda sondea los event-source mappings y procesa los mensajes en lotes. SQS tiene semántica at-least-once."},
+
+/* Seguridad */
+{t:"Seguridad",q:"¿Qué es el Execution Role de una función Lambda?",o:["El rol IAM que la función asume para hablar con otros servicios","El usuario root de la cuenta AWS","El rol de los administradores de la consola","Un rol solo de lectura para logs"],a:0,e:"Concede permisos para escribir logs, usar KMS, conectarse a la VPC o llamar a otros servicios."},
+{t:"Seguridad",q:"¿Qué controla la resource-based policy de Lambda?",o:["Quién puede invocar la función","Cuánta memoria puede usar la función","Qué runtime puede ejecutar la función","Dónde se guardan los logs"],a:0,e:"Define qué identidades o servicios (S3, API GW, otra cuenta) tienen permiso para invocar."},
+{t:"Seguridad",q:"¿Cómo accede una función Lambda a recursos de una VPC privada?",o:["Mediante ENIs (interfaces elásticas) en la subred","Por IP pública directa","Con una VPN configurada","No puede acceder nunca"],a:0,e:"Lambda crea ENIs en tus subredes privadas para alcanzar RDS, ElastiCache u otros servicios internos."},
+{t:"Seguridad",q:"¿Cómo se cifran las variables de entorno con secretos?",o:["Con AWS KMS","Con TLS 1.3","Con cifrado AES por defecto sin clave","Con certificados ACM"],a:0,e:"Puedes cifrar las env vars con una clave KMS. Regla de oro: principio de menor privilegio."},
+
+/* Observabilidad */
+{t:"Observabilidad",q:"¿Qué métricas publica Lambda automáticamente en CloudWatch?",o:["Invocations, Errors, Throttles, Duration","CPU, memoria y red de la instancia","Requests por segundo del balanceador","Latencia DNS y TTFB"],a:0,e:"Son gratuitas y se agregan por minuto. No necesitas instrumentar nada para verlas."},
+{t:"Observabilidad",q:"¿Qué servicio AWS permite trazas distribuidas de extremo a extremo?",o:["AWS X-Ray","AWS Config","CloudTrail","Trusted Advisor"],a:0,e:"X-Ray traza cada request a través de API GW, Lambda, DynamoDB… mostrando latencias y errores."},
+{t:"Observabilidad",q:"¿Dónde aparecen los print() y console.log() de tu código?",o:["CloudWatch Logs","S3","DynamoDB","El bucket de CloudTrail"],a:0,e:"Los logs de stdout/stderr van a CloudWatch Logs automáticamente."},
+
+/* Layers */
+{t:"Layers",q:"¿Qué es un layer de Lambda?",o:["Un ZIP con dependencias y librerías reutilizables","Un tipo de instancia EC2","Un bucket S3 versionado","Una política IAM adjunta"],a:0,e:"Los layers comparten deps entre funciones sin duplicar código. Incluyen librerías, runtimes custom o agentes."},
+{t:"Layers",q:"¿Cuántos layers puede tener una función como máximo?",o:["5","1","10","20"],a:0,e:"Hasta 5 capas. La suma ZIP de la función más las capas no puede superar 250 MB sin comprimir."},
+{t:"Layers",q:"¿Cómo se versionan los layers?",o:["Son inmutables: cada publicación crea una versión nueva","Se sobreescriben con cada deploy","Solo pueden tener una versión","Se versionan en Git exclusivamente"],a:0,e:"Cada capa tiene ARNs por versión (…:layer:nombre:1). Actualizar el layer lo heredan todas las funciones."},
+
+/* Microcontenedores */
+{t:"Microcontenedores",q:"¿Qué tecnología de aislamiento usa Lambda?",o:["Micro-VMs basadas en Firecracker","Contenedores Docker tradicionales","KVM clásico con una VM por función","Namespaces de Linux sin VM"],a:0,e:"Firecracker, creado por AWS, lanza micro-VMs ligeras en milisegundos manteniendo fuerte aislamiento."},
+{t:"Microcontenedores",q:"¿El directorio /tmp persiste entre invocaciones?",o:["Sí, mientras viva el entorno warm","No, se borra en cada invocación","Solo 24 horas","Depende del runtime"],a:0,e:"/tmp persiste dentro del mismo entorno warm y se comparte entre invocaciones, pero es efímero y desaparece al reciclarse."},
+{t:"Microcontenedores",q:"¿Cómo desplegar tu función además de un ZIP?",o:["Con una imagen de contenedor desde ECR","Con un archivo .jar en S3","Con una plantilla de CloudFormation","Con un script en Lambda"],a:0,e:"Desde 2020 puedes empaquetar la función como imagen Docker (hasta 10 GB) alojada en Amazon ECR."},
+
+/* Lambda@Edge */
+{t:"Lambda@Edge",q:"¿Dónde se ejecutan las funciones Lambda@Edge?",o:["En los edge locations de CloudFront","En una región específica que eliges","En tu VPC privada","En instancias EC2 dedicadas"],a:0,e:"Corren junto al usuario final en los puntos de presencia de CloudFront, reduciendo latencia."},
+{t:"Lambda@Edge",q:"¿Cuántos triggers tiene Lambda@Edge?",o:["4: viewer/origin × request/response","2: request y response","1: viewer request","6: uno por método HTTP"],a:0,e:"Viewer request, origin request, origin response y viewer response. Cubren todo el ciclo del CDN."},
+{t:"Lambda@Edge",q:"¿Cuál es el límite de duración para triggers viewer?",o:["5 segundos","1 minuto","15 minutos","100 ms"],a:0,e:"5 s para viewer request/response; 30 s para origin. La respuesta no puede superar 1 MB."},
+
+/* Serverless */
+{t:"Serverless",q:"¿Qué escala Lambda automáticamente?",o:["De cero a miles de invocaciones paralelas","Solo hasta 100 invocaciones","Manual con Auto Scaling Groups","Nada, hay que provisionar"],a:0,e:"Cada evento crea o reutiliza entornos: de 0 a miles de ejecuciones concurrentes sin configuración."},
+{t:"Serverless",q:"¿Cuál es el beneficio principal frente a correr tus propios servidores?",o:["No gestionar servidores, parches ni SO","Código en cualquier lenguaje sin límites","Cero latencia en todos los casos","Almacenamiento ilimitado"],a:0,e:"El modelo serverless elimina la gestión de infraestructura: AWS se encarga de todo el plano operativo."},
+{t:"Serverless",q:"¿Qué afirmación sobre alta disponibilidad es cierta en Lambda?",o:["Es responsabilidad del servicio, con redundancia integrada","La configuras tú con zonas de disponibilidad","Necesitas un ALB con health checks","Solo funciona en una AZ"],a:0,e:"Lambda ofrece HA y tolerancia a fallos por diseño; tú solo escribes el código."},
+
+/* Cold starts */
+{t:"Cold starts",q:"¿Qué es un cold start?",o:["El arranque de un entorno nuevo para la primera invocación","Una función que devuelve un error 500","La desconexión de una VPC","El reinicio de una base de datos"],a:0,e:"Descarga del código, inicialización del runtime e imports antes de ejecutar el handler. ~100 ms a 2 s+."},
+{t:"Cold starts",q:"¿Qué opción elimina prácticamente los cold starts?",o:["Provisioned Concurrency","Reserved Concurrency","Un layer con el código","Una función URL"],a:0,e:"Provisioned mantiene entornos calientes preinicializados. SnapStart (Java/.NET) también los reduce drásticamente."},
+{t:"Cold starts",q:"¿Cuál es típicamente la fase más costosa del cold start?",o:["La carga de dependencias (imports)","El arranque del sistema operativo","La creación del DNS","La autenticación IAM"],a:0,e:"Inicializar runtime y, sobre todo, importar librerías pesadas domina el tiempo. Por eso se inicializa fuera del handler."},
+
+/* Internals */
+{t:"Internals",q:"¿Cuántos requests procesa a la vez un micro-contenedor Lambda?",o:["Uno solo","Dos","Diez","Ilimitados"],a:0,e:"Cada entorno procesa un único request a la vez. La concurrencia = número de entornos. Ráfagas mayores crean nuevos entornos (cold)."},
+{t:"Internals",q:"¿Las funciones Lambda son stateful o stateless?",o:["Stateless: el estado vive en /tmp o en servicios externos","Stateful: el estado persiste entre invocaciones","Solo son stateful en Java","Depende de la región"],a:0,e:"Lambda no garantiza persistencia: el entorno puede reciclarse. Guarda estado en DynamoDB, S3 o Redis."},
+
+/* Handler */
+{t:"Handler",q:"¿Cuál es la firma típica del handler en Python?",o:["def handler(event, context):","def main(request, response):","def lambda_run(data):","def execute(payload):"],a:0,e:"Lambda invoca el handler con el evento (JSON del trigger) y el context (metadatos de runtime)."},
+{t:"Handler",q:"¿Qué contiene el objeto context?",o:["Metadatos: ARN, request ID, timeout, memoria restante","El body del evento original","Las credenciales de la cuenta root","El resultado de la invocación anterior"],a:0,e:"Context trae identidad de la función, límite de memoria restante, request ID y tiempo restante."},
+{t:"Handler",q:"¿Cuándo se ejecuta el código fuera del handler?",o:["Una sola vez por entorno (init)","En cada invocación","Nunca","Solo en cold starts y warm starts"],a:0,e:"El código de nivel superior corre en la fase de init: ideal para imports y conexiones. No se factura en invocaciones warm."},
+
+/* Versioning */
+{t:"Versioning",q:"¿Qué crea aws lambda publish-version?",o:["Una versión inmutable del código y configuración","Un alias temporal","Un deploy en caliente a producción","Un backup en S3"],a:0,e:"Cada publish congela un snapshot inmutable con ARN propio. $LATEST sigue siendo el código editable."},
+{t:"Versioning",q:"¿Qué es $LATEST?",o:["La versión editable a la que apuntas al modificar la función","La versión estable en producción","El alias por defecto de CodeDeploy","El ARN de la última capa"],a:0,e:"$LATEST siempre apunta al código editable actual. v1, v2… son los snapshots publicados."},
+{t:"Versioning",q:"¿Para qué sirve un alias en Lambda?",o:["Puntero estable a una versión; URL de invocación inmutable","Para cambiar el runtime de la función","Para cifrar variables de entorno","Para limitar el timeout"],a:0,e:"El alias (p. ej. prod → v7) no cuesta y permite canary/blue-green con weighted routing sin tocar las URLs."},
+{t:"Versioning",q:"¿Qué estrategia de despliegue gestiona CodeDeploy con Lambda?",o:["Linear, canary y all-at-once","Solo blue-green","Solo rolling con EC2","Rollback manual obligatorio"],a:0,e:"CodeDeploy reparte tráfico entre versiones según reglas y puede hacer rollback automático por alarmas."},
+
+/* Destinations */
+{t:"Destinations",q:"¿Qué enrutan las Destinations de Lambda?",o:["El resultado de invocaciones asíncronas: éxito o fallo","Las peticiones HTTP entrantes","Los logs de CloudWatch","El tráfico del API Gateway"],a:0,e:"Configuras onSuccess y onFailure para enviar la respuesta o el error a otro servicio sin código extra."},
+{t:"Destinations",q:"¿A qué servicios puede enviar una Destination?",o:["SQS, SNS, EventBridge u otra función Lambda","Solo a S3","Solo a DynamoDB","A cualquier endpoint HTTP público"],a:0,e:"Cuatro destinos: SQS, SNS, EventBridge y Lambda. Sustituyen al patrón try/catch → SNS dentro del código."},
+{t:"Destinations",q:"¿Las Destinations funcionan con invocaciones síncronas?",o:["No, solo asíncronas y event-source mappings","Sí, siempre","Solo con API Gateway","Solo con CloudFront"],a:0,e:"Solo aplican a invocaciones async y poll-based. En modo síncrono gestionas el resultado en tu código."}
+];
+
+/* ================= STATE ================= */
+const S = {mode:null, topics:new Set(), qs:[], idx:0, score:0, streak:0, best:0, lives:3, correct:0, wrong:0, timeLeft:0, totalTime:0, muted:false, timer:null};
+const MODES = {
+  classic:{n:"Clásico",ico:"❤️",badge:"3 vidas",p:"3 vidas, rachas y bonus de velocidad. ¿Llegas al final?"},
+  timed:{n:"Contrarreloj",ico:"⏱️",badge:"90 s",p:"90 segundos para responder el máximo de preguntas."},
+  practice:{n:"Práctica",ico:"📚",badge:"sin presión",p:"Sin vidas ni reloj. Aprende con explicaciones tras cada respuesta."}
+};
+const BEST_KEY = "aws-lambda-quiz-best";
+let playing = false;
+
+/* ================= AUDIO (WebAudio) ================= */
+let AC=null;
+function ac(){ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+function tone(f0,f1,dur,vol,type){
+  if(S.muted) return; try{
+    const a=ac(), o=a.createOscillator(), g=a.createGain();
+    o.type=type||"sine"; o.frequency.setValueAtTime(f0,a.currentTime);
+    if(f1) o.frequency.exponentialRampToValueAtTime(f1,a.currentTime+dur);
+    g.gain.setValueAtTime(vol,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+dur);
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+dur);
+  }catch(e){}
+}
+const sfx = { ok:()=>{tone(520,880,.18,.25);tone(880,1040,.12,.18)}, bad:()=>{tone(220,140,.3,.3,"triangle")}, click:()=>{tone(600,600,.06,.15,"square")}, end:()=>{[523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,f,.2,.22),i*120))} };
+
+/* ================= CONFETTI ================= */
+const cv=document.getElementById("confetti"), cx=cv.getContext("2d");
+let parts=[],confOn=false;
+function sizeConfetti(){cv.width=innerWidth;cv.height=innerHeight}
+sizeConfetti(); addEventListener("resize",sizeConfetti);
+function launchConfetti(){
+  const colors=["#FF9900","#53A8FB","#2EC5BE","#A36BFF","#6BC853","#F06292"];
+  for(let i=0;i<160;i++) parts.push({x:innerWidth/2+ (Math.random()-.5)*200, y:innerHeight*.3, vx:(Math.random()-.5)*9, vy:Math.random()*-11-3, s:6+Math.random()*7, c:colors[i%colors.length], r:Math.random()*Math.PI, vr:(Math.random()-.5)*.2, life:1});
+  if(!confOn){confOn=true; requestAnimationFrame(drawConfetti)}
+}
+function drawConfetti(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  parts.forEach(p=>{p.x+=p.vx; p.y+=p.vy; p.vy+=.32; p.r+=p.vr; p.life-=.006;
+    cx.save(); cx.translate(p.x,p.y); cx.rotate(p.r); cx.globalAlpha=Math.max(0,p.life);
+    cx.fillStyle=p.c; cx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.6); cx.restore();
+  });
+  parts=parts.filter(p=>p.life>0 && p.y<cv.height+50);
+  if(parts.length) requestAnimationFrame(drawConfetti); else confOn=false;
+}
+
+/* ================= HELPERS ================= */
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function rank(pct){
+  if(pct===100) return ["AWS LAMBDA GODMODE","👑"];
+  if(pct>=90) return ["Serverless Master","🏆"];
+  if(pct>=75) return ["Lambda Ninja","🥋"];
+  if(pct>=50) return ["Lambda Specialist","⚙️"];
+  if(pct>=25) return ["Lambda Apprentice","🔧"];
+  return ["Lambda Novice","🌱"];
+}
+function stars(pct){
+  if(pct>=90) return "⭐⭐⭐"; if(pct>=60) return "⭐⭐"; if(pct>=30) return "⭐"; return "";
+}
+function saveBest(){
+  const prev=+localStorage.getItem(BEST_KEY)||0;
+  if(S.score>prev){localStorage.setItem(BEST_KEY,S.score); return {new:true,prev}}
+  return {new:false,prev};
+}
+
+/* ================= RENDER ================= */
+const app=document.getElementById("app");
+
+function home(){
+  const prev=+localStorage.getItem(BEST_KEY)||0;
+  app.innerHTML=`
+  <div class="card home">
+    <div class="logo">λ</div>
+    <h1>AWS LAMBDA<span class="lam">λ</span></h1>
+    <div class="tagline">QUIZ GAMIFICADO · 15 TEMAS · ${BANK.length} PREGUNTAS</div>
+    <div class="modes">
+      ${Object.entries(MODES).map(([k,m])=>`
+        <div class="mode" onclick="startMode('${k}')">
+          <span class="badge">${m.badge}</span>
+          <div class="ico">${m.ico}</div>
+          <h3>${m.n}</h3><p>${m.p}</p>
+        </div>`).join("")}
+    </div>
+    <div class="topics">
+      <button class="topic-chip on" onclick="toggleTopic(this,'__all')">Todos</button>
+      ${TOPICS.map(t=>`<button class="topic-chip" onclick="toggleTopic(this,'${t}')">${t}</button>`).join("")}
+    </div>
+    <div class="foot">
+      <span>aws<span style="color:#fff;font-weight:800">fundamentals</span> · aws-lambda</span>
+      <span class="hs">🏅 Récord: ${prev.toLocaleString()} pts</span>
+    </div>
+  </div>`;
+}
+function toggleTopic(el,t){
+  sfx.click();
+  if(t==="__all"){ document.querySelectorAll(".topic-chip").forEach(c=>c.classList.remove("on")); el.classList.add("on"); S.topics.clear(); return; }
+  const all=document.querySelector(".topic-chip"); all.classList.remove("on");
+  el.classList.toggle("on");
+  if(el.classList.contains("on")) S.topics.add(t); else S.topics.delete(t);
+  if(S.topics.size===0) all.classList.add("on");
+}
+
+/* ------------ QUIZ ------------ */
+function startMode(mode){
+  sfx.click();
+  S.mode=mode; S.idx=0; S.score=0; S.streak=0; S.lives=3; S.correct=0; S.wrong=0;
+  const pool = S.topics.size? BANK.filter(q=>S.topics.has(q.t)) : BANK;
+  S.qs = shuffle(pool).slice(0, Math.min(15, pool.length));
+  S.totalTime = mode==="timed"? 90 : 0; S.timeLeft = S.totalTime;
+  playing=true;
+  if(S.totalTime){ clearInterval(S.timer); S.timer=setInterval(()=>{ S.timeLeft--; updateTimer(); if(S.timeLeft<=0) endGame(); },1000); }
+  renderQuiz();
+}
+function renderQuiz(){
+  const q=S.qs[S.idx]; if(!q){ endGame(); return; }
+  const col=T_COLORS[q.t];
+  const opts=[0,1,2,3].map(i=>`<button class="opt" id="opt${i}" onclick="answer(${i})"><span class="letter">${"ABCD"[i]}</span><span>${esc(q.o[i])}</span></button>`).join("");
+  app.innerHTML=`
+  <div class="card">
+    <div class="topbar">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="stat score"><span class="ico">💎</span><span id="score">${S.score.toLocaleString()}</span></div>
+        ${S.mode==="classic"?`<div class="stat lives"><span class="ico">${hearts()}</span></div>`:""}
+        ${S.mode==="classic"?`<div class="stat"><span class="ico">🔥</span><span>x${S.streak||1}</span></div>`:""}
+      </div>
+      <div class="stat timer" id="timer" style="${S.totalTime?"":"display:none"}"><span class="ico">⏱️</span><span id="tval">${S.timeLeft}s</span></div>
+    </div>
+    <div class="progress"><div class="fill" style="width:${((S.idx)/S.qs.length*100).toFixed(1)}%"></div></div>
+    <div class="qmeta">
+      <span class="qchip ${col}">${q.t}</span>
+      <span class="qnum">PREGUNTA ${S.idx+1} / ${S.qs.length}</span>
+    </div>
+    <div class="q">${esc(q.q)}</div>
+    <div class="opts" id="opts">${opts}</div>
+    <div class="feedback" id="fb"></div>
+    <div class="next-row">
+      <button class="btn btn-ghost" onclick="home()">🏠 Salir</button>
+      <button class="btn" style="font-size:15px;padding:8px 14px" onclick="S.muted=!S.muted;this.textContent=S.muted?'🔇':'🔊'">🔊</button>
+      <button class="btn btn-primary" id="nextBtn" style="display:none" onclick="nextQ()">Siguiente →</button>
+    </div>
+  </div>`;
+  const optsEls=document.querySelectorAll(".opt");
+  optsEls.forEach((b,i)=>{ b.addEventListener("keydown",e=>{ if(e.key===String(i+1)&&!b.disabled) answer(i); }); });
+  window.addEventListener("keydown",keyHandler);
+}
+function hearts(){ return Array.from({length:3},(_,i)=>`<span class="heart ${i<S.lives?"":"off"}">❤️</span>`).join("") }
+function keyHandler(e){
+  if(playing && e.key==="Enter"){ const nb=document.getElementById("nextBtn"); if(nb && nb.style.display!=="none") nextQ(); }
+  if(playing && ["1","2","3","4"].includes(e.key)){ const b=document.getElementById("opt"+(+e.key-1)); if(b && !b.disabled) answer(+e.key-1); }
+}
+function answer(i){
+  const q=S.qs[S.idx]; const ok = i===q.a;
+  const els=document.querySelectorAll(".opt");
+  els.forEach((el,j)=>{ el.disabled=true; el.classList.add(j===q.a?"correct":(j===i?"wrong":"dim")); });
+  const fb=document.getElementById("fb");
+  let gained=0;
+  if(ok){
+    S.correct++; S.streak++;
+    gained = 100 + (S.streak-1)*20;
+    S.score += gained; sfx.ok();
+  }else{
+    S.wrong++; S.streak=0;
+    if(S.mode==="classic") S.lives--;
+    sfx.bad();
+  }
+  document.getElementById("score").textContent=S.score.toLocaleString();
+  if(S.mode==="classic") document.querySelector(".stat.lives").innerHTML=`<span class="ico">${hearts()}</span>`;
+  fb.innerHTML=`<span class="big">${ok?"✅":"❌"}</span><div><b>${ok?"¡Correcto!":"Incorrecto"}</b> · ${esc(q.e)}</div>${ok?`<span class="gains">+${gained} pts${S.streak>1?`<br>🔥 racha x${S.streak}`:""}</span>`:""}`;
+  fb.className="feedback "+(ok?"ok":"bad");
+  const nb=document.getElementById("nextBtn");
+  nb.style.display="inline-block";
+  if(S.mode==="classic" && S.lives<=0){ nb.textContent="Ver resultado →"; }
+  else nb.textContent = S.idx+1>=S.qs.length? "Ver resultado →" : "Siguiente →";
+}
+function nextQ(){
+  window.removeEventListener("keydown",keyHandler);
+  if(S.mode==="classic" && S.lives<=0){ endGame(); return; }
+  S.idx++;
+  if(S.idx>=S.qs.length) endGame(); else renderQuiz();
+}
+function updateTimer(){ const tv=document.getElementById("tval"); if(tv) tv.textContent=S.timeLeft+"s"; }
+
+/* ------------ END ------------ */
+function endGame(){
+  playing=false; clearInterval(S.timer);
+  window.removeEventListener("keydown",keyHandler);
+  const pct = Math.round(S.qs.length? S.correct/S.qs.length*100 : 0);
+  const r=rank(pct); const st=stars(pct);
+  const res=saveBest();
+  sfx.end();
+  if(pct>=60) launchConfetti();
+  app.innerHTML=`
+  <div class="card result">
+    <div class="r-circle"><div class="pct">${pct}%</div><div class="lbl">${S.mode==="classic"?"partida":"ronda"}</div></div>
+    <h2>${st} ${r[1]} ${r[0]}</h2>
+    <div class="rank-line">${st}</div>
+    <div class="stats">
+      <div class="stat-box"><div class="n">${S.score.toLocaleString()}</div><div class="l">Puntos</div></div>
+      <div class="stat-box"><div class="n">${S.correct}/${S.qs.length}</div><div class="l">Aciertos</div></div>
+      ${S.mode==="classic"?`<div class="stat-box"><div class="n">${S.streak}</div><div class="l">Racha máx</div></div>`:`<div class="stat-box"><div class="n">${S.wrong}</div><div class="l">Fallos</div></div>`}
+    </div>
+    <div class="best">${res.new? "🎉 ¡Nuevo récord!":"Récord personal: <b>"+res.prev.toLocaleString()+" pts</b>"}</div>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="startMode('${S.mode}')">🔁 Otra ronda</button>
+      <button class="btn" onclick="home()">🏠 Inicio</button>
+    </div>
+  </div>`;
+}
+home();
+</script>
+</body>
+</html>
