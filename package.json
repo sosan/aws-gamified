@@ -1,0 +1,18 @@
+{
+  "name": "aws-skill-tree-rpg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AWS Skill Tree RPG: quiz gamificado de AWS",
+  "scripts": {
+    "test": "node tests/run.cjs",
+    "test:data": "node tests/run.cjs data",
+    "test:battle": "node tests/run.cjs battle",
+    "test:progression": "node tests/run.cjs progression",
+    "test:screens": "node tests/run.cjs screens"
+  },
+  "keywords": ["aws", "quiz", "rpg", "game", "certification", "spanish"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
