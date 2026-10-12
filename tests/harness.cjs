@@ -132,9 +132,9 @@ function buildAudioContext() {
 
 /** Globals del juego que exponemos a las pruebas. */
 const EXPORTS = [
-  "NODES", "BANK", "REALMS", "NODE", "ITEM_LIST", "RANKS",
+  "NODES", "BANK", "BILINGUAL_BANK", "REALMS", "NODE", "ITEM_LIST", "RANKS",
   "nodeOf", "nodesOfRealm", "realmOf", "expandQ", "allQuestionsFor", "TOTAL_QUESTIONS",
-  "PASS_PCT", "P", "B", "T", "TRAIN_MODES", "SAVE_KEY",
+  "PASS_PCT", "P", "B", "T", "TRAIN_MODES", "SAVE_KEY", "L", "t", "setLang", "iname", "idesc",
   "isCleared", "pct", "unlocked", "missingReqs", "clearedCount", "totalPct", "anyAvailable",
   "rankOf", "damageFor", "save", "load",
   "screenTitle", "openMap", "openBrief", "openTraining", "startTraining",
@@ -142,10 +142,10 @@ const EXPORTS = [
   "startBattle", "answer", "nextHit", "finishBattle", "quitBattle",
   "useItem", "toggleMute", "wipeSave", "drawLinks", "refreshInventory",
   "hearts", "esc", "shuffle",
-  "MATCH_BANK", "WORDS_BANK", "CROSS_BANK", "MATCH_COLORS",
+  "MATCH_BANK", "WORDS_BANK", "CROSS_BANK", "MATCH_COLORS", "HANG_CLUES",
   "chType", "instantiateChallenge", "timeFor", "buildWordGrid", "buildCrossGrid",
-  "renderQuiz", "renderMatch", "renderWordSearch", "renderCrossword",
-  "matchPick", "wsPick", "xwSelect", "xwSubmit", "hit", "missHit"
+  "renderQuiz", "renderMatch", "renderWordSearch", "renderCrossword", "renderMemory", "renderHangman",
+  "matchPick", "wsPick", "xwSelect", "xwSubmit", "memPick", "hangPick", "hit", "missHit"
 ];
 
 /**
@@ -202,7 +202,14 @@ function loadGame(opts = {}) {
   /* El juego ahora es modular: los módulos viven en js/data.js, js/engine.js
      y js/main.js, y el HTML solo enlaza hojas de estilo y scripts. */
   const html = fs.readFileSync(GAME_PATH, "utf8");
-  const MODULES = ["js/data.js", "js/engine.js", "js/main.js"];
+  /* Mismo orden de carga que aws_skill_rpg.html: data.js → skillbuilder_bank.js
+     → engine.js → main.js. El banco SkillBuilder alimenta los nodos del reino
+     de Certificación (marcadores "Security:4", etc.). */
+  /* El banco bilingüe (BILINGUAL_BANK) vive en js/bank.js; se carga si existe. */
+  const bankExists = fs.existsSync(path.join(__dirname, "..", "js", "bank.js"));
+  const MODULES = ["js/data.js", "js/skillbuilder_bank.js"]
+    .concat(bankExists ? ["js/bank.js"] : [])
+    .concat(["js/engine.js", "js/main.js"]);
   const js = MODULES
     .map((m) => fs.readFileSync(path.join(__dirname, "..", m), "utf8"))
     .join("\n");

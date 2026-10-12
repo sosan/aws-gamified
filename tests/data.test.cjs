@@ -10,9 +10,9 @@ const { NODES, BANK, REALMS, NODE, ITEM_LIST, RANKS, PASS_PCT, TOTAL_QUESTIONS }
 
 suite("Estructura del árbol");
 
-test("hay 48 nodos en 7 reinos", () => {
-  assertEqual(NODES.length, 48, "nodos totales");
-  assertEqual(REALMS.length, 7, "reinos");
+test("hay 57 nodos en 8 reinos", () => {
+  assertEqual(NODES.length, 57, "nodos totales");
+  assertEqual(REALMS.length, 8, "reinos");
 });
 
 test("cada reino tiene al menos un nodo", () => {
@@ -24,9 +24,9 @@ test("cada reino tiene al menos un nodo", () => {
 test("reparto de enemigos, elites y bosses", () => {
   const byType = {};
   NODES.forEach((n) => { byType[n.t] = (byType[n.t] || 0) + 1; });
-  assertEqual(byType.enemy, 31, "enemigos");
-  assertEqual(byType.elite, 10, "elites (7 originales + 3 salas de puzles)");
-  assertEqual(byType.boss, 7, "bosses");
+  assertEqual(byType.enemy, 37, "enemigos (31 + 6 del reino Certificación)");
+  assertEqual(byType.elite, 12, "elites (10 + 2 del reino Certificación)");
+  assertEqual(byType.boss, 8, "bosses (7 + 1 del reino Certificación)");
 });
 
 test("cada reino cierra con un boss", () => {
@@ -89,10 +89,13 @@ test("cada boss depende del elite de su reino", () => {
   for (const r of REALMS) {
     const nodes = g.nodesOfRealm(r.id);
     const boss = nodes.find((n) => n.t === "boss");
-    const elite = nodes.find((n) => n.t === "elite");
+    const elites = nodes.filter((n) => n.t === "elite");
     assert(!!boss, `el reino ${r.name} necesita un boss`);
-    assert(!!elite, `el reino ${r.name} necesita un elite`);
-    assert(boss.req.includes(elite.id), `${boss.id} debería depender de ${elite.id}`);
+    assertAtLeast(elites.length, 1, `el reino ${r.name} necesita un elite`);
+    assert(
+      elites.some((e) => (boss.req || []).includes(e.id)),
+      `${boss.id} debería depender de un elite de su reino (${elites.map((e) => e.id).join(", ")})`
+    );
     assert(!boss.req.includes(boss.id), `${boss.id} no puede depender de sí mismo`);
   }
 });
@@ -107,8 +110,15 @@ test("cada elite depende de nodos de su propio reino", () => {
 suite("Preguntas");
 
 test("el banco Lambda heredado se conserva íntegro", () => {
-  assertEqual(BANK.length, 52, "preguntas heredadas");
-  for (const q of BANK) {
+  /* Las 748 preguntas de SkillBuilder se distinguen por no tener explicación (e:"")
+     y por aceptar 'a' como array (multi-select). El banco heredado (52 Lambda +
+     23 SAA + 8 SAP) siempre trae 4 opciones, 'a' numérico y explicación. */
+  const inherited = BANK.filter(
+    (b) => !!b.e && typeof b.a === "number" && b.o.length >= 4
+  );
+  assertEqual(inherited.length, 83, "banco heredado (52 + 23 SAA + 8 SAP)");
+  assertEqual(BANK.length, 83 + 748, "total BANK con SkillBuilder (83 + 748)");
+  for (const q of inherited) {
     assertEqual(q.o.length, 4, `opciones de "${q.q}"`);
     assert(q.a >= 0 && q.a <= 3, `índice de respuesta inválido en "${q.q}"`);
     assert(!!q.e, `falta explicación en "${q.q}"`);
@@ -129,17 +139,19 @@ test("todas las preguntas están bien formadas", () => {
       const [text, optsRaw, answer, explain] = q;
       assert(typeof text === "string" && text.length > 8, `texto inválido en ${n.id}`);
       const opts = String(optsRaw).split("|");
-      assertEqual(opts.length, 4, `opciones de ${n.id}: "${text}"`);
-      assertEqual(typeof answer, "number", `respuesta no numérica en ${n.id}`);
-      assert(answer >= 0 && answer <= 3, `respuesta fuera de rango en ${n.id}`);
-      assert(typeof explain === "string" && explain.length > 15, `explicación corta en ${n.id}`);
-      opts.forEach((o, i) => {
-        assert(o.trim().length > 0, `opción ${i} vacía en ${n.id}`);
-        if (i === answer) {
-          const key = o.trim().toLowerCase();
-          assert(!!key, `la respuesta correcta está vacía en ${n.id}`);
-        }
-      });
+      assertAtLeast(opts.length, 2, `opciones de ${n.id}: "${text}"`);
+      const corrects = Array.isArray(answer) ? answer : [answer];
+      assert(corrects.length >= 1, `sin respuestas correctas en ${n.id}`);
+      for (const c of corrects) {
+        assertEqual(typeof c, "number", `respuesta no numérica en ${n.id}`);
+        assert(c >= 0 && c < opts.length, `respuesta fuera de rango en ${n.id}`);
+        assert(opts[c].trim().length > 0, `la respuesta correcta está vacía en ${n.id}`);
+      }
+      if (typeof explain === "string") {
+        /* el banco heredado lleva explicaciones; SkillBuilder no (vacío) */
+      } else {
+        assert(false, `explicación no textual en ${n.id}`);
+      }
     }
   }
   assertAtLeast(total, 200, "total de preguntas disponibles");
@@ -162,11 +174,15 @@ test("los marcadores de tema Lambda son válidos", () => {
     for (const entry of n.q) {
       if (typeof entry !== "string") continue;
       markers++;
-      const [topic, count] = entry.split(":");
+      /* igual que expandQ: el separador es el ÚLTIMO ':' para soportar temas
+         con ':' interno (p. ej. "AWS Industry Quest: Healthcare") */
+      const m = /^(.*):(\d+)$/.exec(entry);
+      const topic = m ? m[1] : entry;
+      const count = m ? +m[2] : NaN;
       assert(topics.has(topic), `tema inexistente "${topic}" en ${n.id}`);
-      assertAtLeast(+count, 1, `cantidad inválida en ${n.id}: ${entry}`);
+      assertAtLeast(count, 1, `cantidad inválida en ${n.id}: ${entry}`);
       const available = BANK.filter((b) => b.t === topic).length;
-      assert(+count <= available, `${n.id} pide ${count} de "${topic}" pero solo hay ${available}`);
+      assert(count <= available, `${n.id} pide ${count} de "${topic}" pero solo hay ${available}`);
     }
   }
   assertAtLeast(markers, 12, "marcadores que reutilizan el banco Lambda");
@@ -221,10 +237,14 @@ test("la tabla de rangos es creciente y acaba en arquitecto", () => {
 });
 
 test("los objetos de la tienda están bien definidos", () => {
-  assertEqual(ITEM_LIST.length, 3, "objetos");
+  assertEqual(ITEM_LIST.length, 4, "objetos (poción, escudo, oráculo y pergamino)");
   for (const it of ITEM_LIST) {
     assert(!!it.id && !!it.ico && !!it.name, `objeto incompleto: ${JSON.stringify(it)}`);
-    assert(it.desc.length > 15, `descripción corta en ${it.id}`);
+    /* name/desc pueden ser string o función (i18n) */
+    const nm = typeof it.name === "function" ? it.name() : it.name;
+    const ds = typeof it.desc === "function" ? it.desc() : it.desc;
+    assert(typeof nm === "string" && nm.length > 2, `nombre corto en ${it.id}`);
+    assert(typeof ds === "string" && ds.length > 15, `descripción corta en ${it.id}`);
     assert(it.price > 0, `precio inválido en ${it.id}`);
     assert(g.P.inv[it.id] >= 0, `inventario inicial sin ${it.id}`);
   }

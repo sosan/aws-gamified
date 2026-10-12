@@ -116,8 +116,9 @@ test("la tienda muestra los tres objetos y sus precios", () => {
   g.openShop();
   const html = app(g);
   for (const it of g.ITEM_LIST) {
-    assert(html.includes(it.name), `falta ${it.name} en la tienda`);
-    assert(html.includes(String(it.price)), `falta el precio de ${it.name}`);
+    const nm = typeof it.name === "function" ? it.name() : it.name;
+    assert(html.includes(nm), `falta ${nm} en la tienda`);
+    assert(html.includes(String(it.price)), `falta el precio de ${nm}`);
   }
   g.__restore();
 });
@@ -222,7 +223,7 @@ test("el HUD refleja XP, rango, oro y progreso", () => {
   const html = app(g);
   assert(/4300/.test(html), "XP en el HUD");
   assert(/640/.test(html), "oro en el HUD");
-  assert(/2\/48/.test(html), "progreso en el HUD");
+  assert(new RegExp(`2\\/${g.NODES.length}`).test(html), "progreso en el HUD");
   assert(/Solutions Developer/.test(html), "rango del jugador");
 
   /* las vidas se pintan como corazones sueltos dentro de un contenedor */

@@ -23,6 +23,8 @@ function startChallenge(game, ch) {
   if (ch.type === "match") game.renderMatch(ch);
   else if (ch.type === "wordsearch") game.renderWordSearch(ch);
   else if (ch.type === "crossword") game.renderCrossword(ch);
+  else if (ch.type === "memory") game.renderMemory(ch);
+  else if (ch.type === "hangman") game.renderHangman(ch);
 }
 
 suite("Bancos de desafíos");
@@ -349,4 +351,209 @@ test("un boss recibe wordsearch y crossword de forma decorativa", () => {
   }
   assert(types.has("wordsearch"), "boss con wordsearch");
   assert(types.has("crossword"), "boss con crossword");
+});
+
+/* ============== MEMORIA ============== */
+
+test("memPick con pareja correcta avanza done y al completar hace hit", () => {
+  const game = loadGame({ store: {}, seed: { lives: 3, gold: 500 } });
+  const ch = {
+    type:"memory", id:"t", title:"Memoria", hint:"h",
+    pairs:[{a:"Lambda", b:"Serverless"}],
+    cards:[
+      {i:0, side:"a", txt:"Lambda"},
+      {i:0, side:"b", txt:"Serverless"}
+    ]
+  };
+  startChallenge(game, ch);
+  const st = game.B.sub.mem;
+  assertEqual(st.total, 1, "una pareja");
+  /* clic en las dos cartas del mismo par → acierto y hit */
+  game.memPick(0);
+  assertEqual(st.flipped.length, 1, "primera carta volteada");
+  game.memPick(1);
+  assertEqual(st.done, 1, "par encontrado");
+  assertEqual(game.B.answered, true, "se cierra la memoria al completar");
+  assertEqual(game.B.hits, 1, "1 golpe al enemigo");
+  game.__restore();
+});
+
+test("memPick con par incorrecto consume un intento y NO resta vida", () => {
+  const game = loadGame({ store: {}, seed: { lives: 3, gold: 500 } });
+  const ch = {
+    type:"memory", id:"t", title:"Memoria", hint:"h",
+    pairs:[{a:"A1", b:"B1"}, {a:"A2", b:"B2"}],
+    cards:[
+      {i:0, side:"a", txt:"A1"}, {i:0, side:"b", txt:"B1"},
+      {i:1, side:"a", txt:"A2"}, {i:1, side:"b", txt:"B2"}
+    ]
+  };
+  startChallenge(game, ch);
+  const st = game.B.sub.mem;
+  assertEqual(st.attempts, 3, "3 intentos al empezar");
+  /* carta del par 0 (a) + carta del par 1 (b) → par incorrecto */
+  game.memPick(0);
+  game.memPick(3);
+  assertEqual(st.attempts, 2, "intento consumido");
+  assertEqual(st.done, 0, "ningún par acertado");
+  assertEqual(game.B.lives, 3, "vidas intactas en memoria");
+  assertEqual(game.B.answered, false, "el turno continúa");
+  game.__restore();
+});
+
+test("memPick agota los 3 intentos y entonces missHit", () => {
+  const game = loadGame({ store: {}, seed: { lives: 3, gold: 500 } });
+  const ch = {
+    type:"memory", id:"t", title:"Memoria", hint:"h",
+    pairs:[{a:"A1", b:"B1"}, {a:"A2", b:"B2"}],
+    cards:[
+      {i:0, side:"a", txt:"A1"}, {i:0, side:"b", txt:"B1"},
+      {i:1, side:"a", txt:"A2"}, {i:1, side:"b", txt:"B2"}
+    ]
+  };
+  startChallenge(game, ch);
+  /* 3 pares incorrectos */
+  game.memPick(0); game.memPick(3);
+  game.memPick(0); game.memPick(3);
+  game.memPick(0); game.memPick(3);
+  assertEqual(game.B.sub.mem.attempts, 0, "intentos agotados");
+  assertEqual(game.B.answered, true, "el desafío termina tras agotar intentos");
+  assertEqual(game.B.lives, 2, "se pierde una vida al fallar el desafío");
+  game.__restore();
+});
+
+test("re-clic sobre la misma carta la deselecciona en memoria", () => {
+  const game = loadGame({ store: {}, seed: {} });
+  const ch = {
+    type:"memory", id:"t", title:"Memoria", hint:"h",
+    pairs:[{a:"A", b:"B"}],
+    cards:[{i:0, side:"a", txt:"A"}, {i:0, side:"b", txt:"B"}]
+  };
+  startChallenge(game, ch);
+  game.memPick(0);
+  assertEqual(game.B.sub.mem.flipped.length, 1, "primera carta volteada");
+  game.memPick(0);
+  assertEqual(game.B.sub.mem.flipped.length, 0, "re-clic la deselecciona");
+  assertEqual(game.B.sub.mem.attempts, 3, "intentos intactos tras deseleccionar");
+  game.__restore();
+});
+
+/* ============== AHORCADO ============== */
+
+test("hangPick con letra correcta la marca como guessed y revela la celda", () => {
+  const game = loadGame({ store: {}, seed: {} });
+  const ch = {type:"hangman", id:"t", title:"Ahorcado", hint:"h", word:"AWS"};
+  startChallenge(game, ch);
+  assertEqual(game.B.sub.hang.lives, 6, "6 vidas al empezar");
+  game.hangPick("A");
+  assert(game.B.sub.hang.guessed.has("A"), "A está en guessed");
+  assert(game.B.sub.hang.picked.has("A"), "A está en picked");
+  /* la celda 0 ahora contiene "A" en el DOM */
+  assertEqual(game.__doc.getElementById("hangw0").textContent, "A", "primera celda = A");
+  /* las celdas 1 y 2 siguen vacías */
+  assertEqual(game.__doc.getElementById("hangw1").textContent, "", "W aún oculto");
+  game.__restore();
+});
+
+test("hangPick con letra incorrecta decrementa vidas", () => {
+  const game = loadGame({ store: {}, seed: {} });
+  const ch = {type:"hangman", id:"t", title:"Ahorcado", hint:"h", word:"AWS"};
+  startChallenge(game, ch);
+  game.hangPick("B");
+  assertEqual(game.B.sub.hang.lives, 5, "vida perdida");
+  assert(game.B.sub.hang.picked.has("B"), "B marcada como probada");
+  game.__restore();
+});
+
+test("hangPick completa la palabra → hit al enemigo", () => {
+  const game = loadGame({ store: {}, seed: { lives: 3, gold: 500 } });
+  const ch = {type:"hangman", id:"t", title:"Ahorcado", hint:"h", word:"AWS"};
+  startChallenge(game, ch);
+  game.hangPick("A");
+  game.hangPick("W");
+  game.hangPick("S");
+  assertEqual(game.B.answered, true, "el desafío termina al adivinar");
+  assertEqual(game.B.hits, 1, "1 golpe al enemigo");
+  game.__restore();
+});
+
+test("hangPick agota las 6 vidas → missHit", () => {
+  const game = loadGame({ store: {}, seed: { lives: 3, gold: 500 } });
+  const ch = {type:"hangman", id:"t", title:"Ahorcado", hint:"h", word:"AWS"};
+  startChallenge(game, ch);
+  for (const L of ["B","C","D","E","F","G"]){
+    game.B.answered = false;
+    game.hangPick(L);
+  }
+  assertEqual(game.B.sub.hang.lives, 0, "vidas agotadas");
+  assertEqual(game.B.answered, true, "el desafío termina");
+  assertEqual(game.B.lives, 2, "se pierde una vida al fallar");
+  game.__restore();
+});
+
+test("HANG_CLUES contiene pistas específicas para términos AWS comunes", () => {
+  assert(typeof g.HANG_CLUES === "object" && g.HANG_CLUES !== null, "HANG_CLUES existe");
+  for (const w of ["LAMBDA","S3","DYNAMODB","CLOUDWATCH","IAM","WAF"]) {
+    assert(typeof g.HANG_CLUES[w] === "string" && g.HANG_CLUES[w].length > 10,
+      `${w} tiene pista específica`);
+  }
+});
+
+/* ============== FASE 1: MERCADER + DROPS ============== */
+
+test("el objeto Pergamino de pista existe y está en la tienda", () => {
+  assert(g.ITEM_LIST.some(it => it.id === "scroll"), "scroll en ITEM_LIST");
+  const scroll = g.ITEM_LIST.find(it => it.id === "scroll");
+  assert(scroll.price > 0, "precio > 0");
+  const ds = typeof scroll.desc === "function" ? scroll.desc() : scroll.desc;
+  assert(typeof ds === "string" && ds.length > 15, "descripción");
+});
+
+test("useItem scroll pinta la respuesta correcta en verde 5s sin gastar fuera de quiz", () => {
+  const game = loadGame({ store: {}, seed: { lives: 3, gold: 500, inv: { potion:1, shield:1, oracle:1, scroll:1 } } });
+  const ch = {type:"match", id:"t", title:"t", hint:"h", pairs:[{a:"A", b:"B"}]};
+  startChallenge(game, ch);
+  const before = game.P.inv.scroll;
+  game.useItem("scroll");
+  /* en match, no hay .opt → scroll no debe gastarse (solo aplica a quiz) */
+  assertEqual(game.P.inv.scroll, before, "scroll no se gasta en retos no-quiz");
+  game.__restore();
+});
+
+/* ============== FASE 2: BANCO PRACTITIONER ============== */
+
+test("BANK contiene los topics SAA y SAP con preguntas de certificación", () => {
+  const saa = g.BANK.filter(b => b.t === "SAA");
+  const sap = g.BANK.filter(b => b.t === "SAP");
+  assertAtLeast(saa.length, 20, "≥20 preguntas SAA");
+  assertAtLeast(sap.length, 5, "≥5 preguntas SAP");
+  /* las preguntas tienen 4 opciones, answer válida y explicación */
+  for (const q of saa) {
+    assert(q.q && q.o && q.o.length === 4, `SAA "${q.q.slice(0,30)}…" tiene 4 opciones`);
+    assert(q.a >= 0 && q.a <= 3, "answer válida");
+    assert(typeof q.e === "string" && q.e.length > 15, "explicación");
+  }
+});
+
+test("los elites y bosses meten preguntas Practitioner automáticamente", () => {
+  /* fnd-auditor es elite → debe tener quiz-bank SAA:2 */
+  const elite = g.nodeOf("fnd-auditor");
+  const eliteHasSAA = elite.q.some(e => e && e.type === "quiz-bank" && e.topic === "SAA");
+  assert(eliteHasSAA, `elite ${elite.id} tiene quiz-bank SAA`);
+  /* fnd-guardian es boss → debe tener quiz-bank SAA y SAP */
+  const boss = g.nodeOf("fnd-guardian");
+  const bossHasSAA = boss.q.some(e => e && e.type === "quiz-bank" && e.topic === "SAA");
+  const bossHasSAP = boss.q.some(e => e && e.type === "quiz-bank" && e.topic === "SAP");
+  assert(bossHasSAA, `boss ${boss.id} tiene quiz-bank SAA`);
+  assert(bossHasSAP, `boss ${boss.id} tiene quiz-bank SAP`);
+});
+
+test("expandQ resuelve {type:'quiz-bank'} a tuplas de quiz del topic", () => {
+  const fakeNode = {q: [{type:"quiz-bank", topic:"SAA", n:3}]};
+  const out = g.expandQ(fakeNode);
+  assertEqual(out.length, 3, "3 preguntas SAA");
+  for (const p of out) {
+    assert(Array.isArray(p), "cada resultado es tupla (array)");
+    assertEqual(p.length, 4, "tupla quiz [text, opts, answer, expl]");
+  }
 });

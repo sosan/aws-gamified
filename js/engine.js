@@ -33,10 +33,11 @@ const sfx = {
 /* ---------- ESTADO ---------- */
 const P = {
   muted:false,
+  lang:"es",         /* idioma activo: "es" o "en" (guardado en localStorage) */
   xp:0, gold:120,
   lives:3,
   cleared:{},        /* nodeId -> {best, tries} */
-  inv:{potion:1, shield:1, oracle:1},
+  inv:{potion:1, shield:1, oracle:1, scroll:1},
   stats:{kills:0, bosses:0, deaths:0, perfect:0},
   trained:{},        /* nodeId -> true (entrenamiento libre) */
   lastNode:null
@@ -68,6 +69,7 @@ const CH_BANK = {match:MATCH_BANK, wordsearch:WORDS_BANK, crossword:CROSS_BANK};
 
 /* Instancia un reto alterno: elige un set del banco (ref = id de set, tag o "__any") */
 function instantiateChallenge(entry){
+  if(entry.type==="quiz-bank") return null;  /* se resuelve en expandQ */
   const bank = CH_BANK[entry.type];
   if(!bank) return null;
   const ref = entry.ref || "__any";
@@ -91,19 +93,56 @@ function instantiateChallenge(entry){
     try{ g = buildCrossGrid(s); }catch(e){ return null; }
     return {type:"crossword", id:s.id, title:s.title, hint:s.hint, words:s.words, grid:g.grid, W:g.W, H:g.H};
   }
-  /* match */
-  return {type:"match", id:s.id, title:s.title, hint:s.hint, pairs:s.pairs.map(p=>({a:p[0],b:p[1]}))};
+  if(entry.type==="match"){
+    return {type:"match", id:s.id, title:s.title, hint:s.hint, pairs:s.pairs.map(p=>({a:p[0],b:p[1]}))};
+  }
+  if(entry.type==="memory"){
+    /* memoria: usa el banco de matching; cada par se convierte en 2 cartas */
+    const pairs = shuffle(s.pairs).slice(0, Math.min(entry.n||4, s.pairs.length));
+    const cards = pairs.flatMap((p,i)=>[
+      {i, side:"a", txt:p[0]},
+      {i, side:"b", txt:p[1]}
+    ]);
+    return {
+      type:"memory", id:s.id+"-mem", title:"Memoria: "+s.title, hint:s.hint,
+      pairs:pairs.map(p=>({a:p[0],b:p[1]})), cards:shuffle(cards)
+    };
+  }
+  if(entry.type==="hangman"){
+    /* ahorcado: elige una palabra del banco de sopa que sea SOLO A-Z (sin
+       dígitos ni caracteres raros), para poder adivinarla letra a letra */
+    const words = s.words.filter(w=>/^[A-Z]+$/.test(w));
+    if(!words.length) return null;
+    return {type:"hangman", id:s.id+"-hang", title:"Ahorcado: "+s.title, hint:s.hint, word:words[Math.floor(Math.random()*words.length)].toUpperCase()};
+  }
+  return null;
 }
 
 /* preguntas y retos resueltos: marcadores "Tema:N" toman del BANK heredado;
    entradas-objeto {type,ref,n} instancian retos alternos */
 function expandQ(n){
   const out = [];
+  /* banco según idioma: BILINGUAL_BANK (es/en) si está, si no BANK plano */
+  const bank = (typeof BILINGUAL_BANK !== "undefined" && BILINGUAL_BANK.length) ? BILINGUAL_BANK : BANK;
+  const pickLang = (b) => {
+    if (b && b.es && b.en) return [ (L()==="en" ? b.en : b.es).q, (L()==="en" ? b.en : b.es).o.join("|"), b.a, (L()==="en" ? b.en : b.es).e || "" ];
+    return [b.q, b.o.join("|"), b.a, b.e || ""];
+  };
   (n.q||[]).forEach(entry=>{
     if(typeof entry === "string"){
-      const [topic,count] = entry.split(":");
-      const k = +count || 4;
-      const pool = BANK.filter(b=>b.t===topic).map(b=>[b.q,b.o.join("|"),b.a,b.e]);
+      /* Marcador "Tema:N": el separador es el ÚLTIMO ':' para que temas con ':'
+         interno (p. ej. "AWS Industry Quest: Healthcare") funcionen. */
+      const m = /^(.*):(\d+)$/.exec(entry);
+      const topic = m ? m[1] : entry;
+      const k = m ? +m[2] : 4;
+      const pool = bank.filter(b=>b.t===topic).map(pickLang);
+      const picked = shuffle(pool).slice(0, Math.min(k, pool.length));
+      picked.forEach(p=>out.push(p));
+    }else if(entry && typeof entry === "object" && entry.type==="quiz-bank"){
+      /* marcador de banco de preguntas (SAA/SAP Practitioner): toma n preguntas
+         al azar del topic indicado y las añade como tuplas de quiz */
+      const topic = entry.topic, k = +entry.n || 1;
+      const pool = bank.filter(b=>b.t===topic).map(pickLang);
       const picked = shuffle(pool).slice(0, Math.min(k, pool.length));
       picked.forEach(p=>out.push(p));
     }else if(entry && typeof entry === "object" && entry.type){
@@ -117,15 +156,24 @@ function expandQ(n){
 }
 function allQuestionsFor(n){ return expandQ(n); }
 
+/* BANCO AWS SKILL BUILDER: js/skillbuilder_bank.js se carga tras data.js y
+   define SKILLBUILDER_BANK (748 preguntas, multi-select con 'a' como array).
+   Se fusiona aquí (no en data.js, que se carga antes) para que los marcadores
+   "Tema:N" (p. ej. "Security:5") y quiz-bank puedan usarlas. */
+if (typeof SKILLBUILDER_BANK !== "undefined" && typeof BANK !== "undefined") {
+  BANK.push(...SKILLBUILDER_BANK);
+}
+
 /* total de preguntas y retos disponibles (inline + banco heredado + retos alternos) */
 const TOTAL_QUESTIONS = NODES.reduce((a,n)=>a+expandQ(n).length, 0);
 
-/* tiempo por tipo de reto: la sopa de letras tiene 5 minutos y cada palabra
-   encontrada añade 5s; los crucigramas dan más margen que una pregunta de quiz */
+/* tiempo por tipo de reto: cada uno tiene su margen en segundos */
 function timeFor(c){
   const t = chType(c);
   if(t==="wordsearch") return 300;
   if(t==="crossword") return 75;
+  if(t==="memory") return 90;
+  if(t==="hangman") return 60;
   if(t==="match") return 40;
   return B.baseTmax || 20;
 }
@@ -175,7 +223,7 @@ function pctFmt(n){ return n+"%"; }
 function realmOf(id){ return REALMS.find(r=>r.id===id); }
 function nodeTag(n){ return n.t==="boss" ? "boss" : n.t==="elite" ? "elite" : "enemy"; }
 function nodeTypeLabel(n){
-  return n.t==="boss" ? "⚔️ BOSS" : n.t==="elite" ? "💀 ELITE" : "⚔️ Enemigo";
+  return n.t==="boss" ? "⚔️ BOSS" : n.t==="elite" ? "💀 ELITE" : "⚔️ "+t("Enemigo","Enemy");
 }
 function nodesOfRealm(rid){ return NODES.filter(n=>n.r===rid); }
 
@@ -245,33 +293,37 @@ function hudHTML(){
   const r = rank();
   return `<div class="hud">
     <div class="brand"><div class="mk">λ</div><div><div>AWS SKILL TREE</div>
-      <div style="font-size:10px;color:var(--soft);letter-spacing:1px">RPG DE CERTIFICACIÓN</div></div></div>
+      <div style="font-size:10px;color:var(--soft);letter-spacing:1px">${t("RPG DE CERTIFICACIÓN","CERTIFICATION RPG")}</div></div></div>
     <div class="who">
       <div class="t">${r.cur.ico} ${r.cur.name}</div>
-      <div class="s">NIVEL ${RANKS.indexOf(r.cur)+1} · ${P.xp.toLocaleString()} XP</div>
+      <div class="s">${t("NIVEL","LEVEL")} ${RANKS.indexOf(r.cur)+1} · ${P.xp.toLocaleString()} XP</div>
       <div class="xpbar"><i style="width:${r.toNext}%"></i></div>
     </div>
     <div class="sp"></div>
     <div class="pill hp"><span class="hudhearts">${hearts(P.lives)}</span></div>
     <div class="pill gold"><span>🪙</span><span>${P.gold}</span></div>
     <div class="pill xp"><span>💎</span><span>${clearedCount()}/${NODES.length}</span></div>
+    <button class="btn btn-sm langbtn" onclick="setLang(L()==='es'?'en':'es')" title="${t('Cambiar idioma / Change language','Change language / Cambiar idioma')}">${L()==='es'?'EN':'ES'}</button>
     <button class="btn btn-sm" onclick="toggleMute()">${P.muted?"🔇":"🔊"}</button>
   </div>`;
 }
 function invHTML(){
   return `<div class="invbar">
-    <div class="lbl">Inventario</div>
+    <div class="lbl">${t("Inventario","Inventory")}</div>
     ${ITEM_LIST.map(it=>`<div class="inv ${P.inv[it.id]?"":"empty"}" data-item="${it.id}"
-      title="${esc(it.name)}: ${esc(it.desc)} (usar durante el combate)"
+      title="${esc(iname(it))}: ${esc(idesc(it))} (${t("usar durante el combate","use during battle")})"
       onclick="useItem('${it.id}')">${it.ico}<span class="cnt">${P.inv[it.id]||0}</span></div>`).join("")}
   </div>`;
 }
 
 /* ---------- ITEMS ---------- */
+function iname(it){ return typeof it.name==="function" ? it.name() : it.name; }
+function idesc(it){ return typeof it.desc==="function" ? it.desc() : it.desc; }
 const ITEM_LIST = [
-  {id:"potion", ico:"🧪", name:"Poción de vida",      desc:"Restaura una vida durante el combate.", price:45},
-  {id:"shield", ico:"🛡️", name:"Escudo de AWS",      desc:"Absorbe el próximo golpe sin perder vida.", price:60},
-  {id:"oracle", ico:"🔮", name:"Oráculo",            desc:"Elimina dos opciones incorrectas de la pregunta actual.", price:40}
+  {id:"potion", ico:"🧪", name:()=>t("Poción de vida","Health potion"),      desc:()=>t("Restaura una vida durante el combate.","Restores one life during battle."), price:45},
+  {id:"shield", ico:"🛡️", name:()=>t("Escudo de AWS","AWS Shield"),      desc:()=>t("Absorbe el próximo golpe sin perder vida.","Absorbs the next hit without losing a life."), price:60},
+  {id:"oracle", ico:"🔮", name:()=>t("Oráculo","Oracle"),            desc:()=>t("Elimina dos opciones incorrectas de la pregunta actual.","Removes two wrong options from the current question."), price:40},
+  {id:"scroll", ico:"📜", name:()=>t("Pergamino de pista","Hint scroll"), desc:()=>t("Revela la respuesta correcta de la pregunta actual durante 5s.","Reveals the correct answer of the current question for 5s."), price:55}
 ];
 
 /* ---------- RENDER: TITULO ---------- */
@@ -280,43 +332,44 @@ function screenTitle(){
     <div class="card title">
       <div class="crest">λ</div>
       <h1>AWS SKILL TREE <em>RPG</em></h1>
-      <div class="sub">Domina la nube combatiendo · ${NODES.length} nodos · ${TOTAL_QUESTIONS} desafíos</div>
+      <div class="sub">${t("Domina la nube combatiendo · "+NODES.length+" nodos · "+TOTAL_QUESTIONS+" desafíos","Master the cloud by battling · "+NODES.length+" nodes · "+TOTAL_QUESTIONS+" challenges")}</div>
       <div class="facts">
-        <div class="fact">Reinos <b>${REALMS.length}</b></div>
-        <div class="fact">Enemigos <b>${NODES.filter(n=>n.t==="enemy").length}</b></div>
-        <div class="fact">Elites <b>${NODES.filter(n=>n.t==="elite").length}</b></div>
-        <div class="fact">Bosses <b>${NODES.filter(n=>n.t==="boss").length}</b></div>
-        <div class="fact">Progreso <b>${totalPct()}%</b></div>
+        <div class="fact">${t("Reinos","Realms")} <b>${REALMS.length}</b></div>
+        <div class="fact">${t("Enemigos","Enemies")} <b>${NODES.filter(n=>n.t==="enemy").length}</b></div>
+        <div class="fact">${t("Elites","Elites")} <b>${NODES.filter(n=>n.t==="elite").length}</b></div>
+        <div class="fact">${t("Bosses","Bosses")} <b>${NODES.filter(n=>n.t==="boss").length}</b></div>
+        <div class="fact">${t("Progreso","Progress")} <b>${totalPct()}%</b></div>
       </div>
       <div class="menu">
         <button class="mbtn" onclick="openMap()">
           <div class="ic">🗺️</div>
-          <div class="tx"><b>Mapa de habilidades</b><span>Avanza por los 7 reinos y desbloquea nodos</span></div>
+          <div class="tx"><b>${t("Mapa de habilidades","Skill map")}</b><span>${t("Avanza por los 7 reinos y desbloquea nodos","Advance through the realms and unlock nodes")}</span></div>
           <div class="tg">${clearedCount()}/${NODES.length}</div>
         </button>
         <button class="mbtn" onclick="openTraining()">
           <div class="ic">🎯</div>
-          <div class="tx"><b>Entrenamiento libre</b><span>Combate libre sin progresión: clásico, asalto rápido y simulacro</span></div>
-          <div class="tg">SIN LÍMITES</div>
+          <div class="tx"><b>${t("Entrenamiento libre","Free training")}</b><span>${t("Combate libre sin progresión: clásico, asalto rápido y simulacro","Free battle without progression: classic, blitz, and drill")}</span></div>
+          <div class="tg">${t("SIN LÍMITES","UNLIMITED")}</div>
         </button>
         <button class="mbtn" onclick="openShop()">
           <div class="ic">🛒</div>
-          <div class="tx"><b>Tienda de objetos</b><span>Gasta oro en pociones, escudos y oráculos</span></div>
+          <div class="tx"><b>${t("Mercader","Merchant")}</b><span>${t("Compra pociones, escudos, oráculos y pergaminos con tu oro","Buy potions, shields, oracles, and scrolls with your gold")}</span></div>
           <div class="tg">🪙 ${P.gold}</div>
         </button>
         <button class="mbtn" onclick="openBestiary()">
           <div class="ic">📖</div>
-          <div class="tx"><b>Bestiario</b><span>Enemigos, elites y bosses de la nube</span></div>
+          <div class="tx"><b>${t("Bestiario","Bestiary")}</b><span>${t("Enemigos, elites y bosses de la nube","Cloud enemies, elites, and bosses")}</span></div>
           <div class="tg">${P.stats.kills}</div>
         </button>
       </div>
       <div style="margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-sm" onclick="openCodex()">🧾 Registro de trucos</button>
-        <button class="btn btn-sm btn-danger" onclick="wipeSave()">🗑 Reiniciar progreso</button>
+        <button class="btn btn-sm" onclick="openCodex()">🧾 ${t("Registro de trucos","Cheat sheet")}</button>
+        <button class="btn btn-sm btn-danger" onclick="wipeSave()">🗑 ${t("Reiniciar progreso","Reset progress")}</button>
+        <button class="btn btn-sm langbtn" onclick="setLang(L()==='es'?'en':'es')" title="${t('Cambiar idioma / Change language','Change language / Cambiar idioma')}">${L()==='es'?'EN':'ES'}</button>
       </div>
       <div style="margin-top:18px;font-size:13px;color:var(--soft)">
-        Vidas: ${P.lives} · Victorias: ${P.stats.kills} · Bosses: ${P.stats.bosses} ·
-        Muertes: ${P.stats.deaths} · Perfectas: ${P.stats.perfect}
+        ${t("Vidas","Lives")}: ${P.lives} · ${t("Victorias","Wins")}: ${P.stats.kills} · ${t("Bosses","Bosses")}: ${P.stats.bosses} ·
+        ${t("Muertes","Deaths")}: ${P.stats.deaths} · ${t("Perfectas","Perfects")}: ${P.stats.perfect}
       </div>
     </div>` + invHTML();
   refreshInventory();
@@ -326,11 +379,11 @@ function openMap(){
   const done = clearedCount();
   let html = `<div class="card screen mapcard" id="mapCard">
     <div class="map-head">
-      <h2>🗺️ Mapa de habilidades</h2>
+      <h2>🗺️ ${t("Mapa de habilidades","Skill map")}</h2>
       <div class="legend">
-        <div class="lg"><i style="background:var(--orange)"></i>Disponible</div>
-        <div class="lg"><i style="background:var(--green)"></i>Superado</div>
-        <div class="lg"><i style="background:var(--soft)"></i>Bloqueado</div>
+        <div class="lg"><i style="background:var(--orange)"></i>${t("Disponible","Available")}</div>
+        <div class="lg"><i style="background:var(--green)"></i>${t("Superado","Cleared")}</div>
+        <div class="lg"><i style="background:var(--soft)"></i>${t("Bloqueado","Locked")}</div>
         <div class="lg">💀 Elite</div>
         <div class="lg">👹 Boss</div>
       </div>
@@ -353,13 +406,14 @@ function openMap(){
   });
 
   html += `<div style="display:flex;gap:12px;justify-content:center;margin-top:26px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="openMap()">🔄 Ver progreso</button>
-      <button class="btn" onclick="screenTitle()">🏠 Inicio</button>
-      <button class="btn" onclick="openCodex()">🧾 Trucos</button>
-      ${P.lives<3?`<button class="btn btn-primary" onclick="restLives()">❤️ Reponer vidas (🪙 60)</button>`:""}
+      <button class="btn btn-primary" onclick="openMap()">🔄 ${t("Ver progreso","View progress")}</button>
+      <button class="btn" onclick="openShop()">🛒 ${t("Mercader","Merchant")}</button>
+      <button class="btn" onclick="screenTitle()">🏠 ${t("Inicio","Home")}</button>
+      <button class="btn" onclick="openCodex()">🧾 ${t("Trucos","Cheats")}</button>
+      ${P.lives<3?`<button class="btn btn-primary" onclick="restLives()">❤️ ${t("Reponer vidas","Restore lives")} (🪙 60)</button>`:""}
     </div>
     ${done===NODES.length?`<div class="unlocks" style="margin-top:20px">
-      <div class="unlock"><span class="u">👑</span>¡Has derrotado a todos los enemigos de la nube! Eres un AWS Architect.</div></div>`:""}
+      <div class="unlock"><span class="u">👑</span>${t("¡Has derrotado a todos los enemigos de la nube! Eres un AWS Architect.","You defeated all cloud enemies! You are an AWS Architect.")}</div></div>`:""}
   </div>` + invHTML();
 
   app.innerHTML = html;
@@ -375,11 +429,12 @@ function nodeHTML(n){
                    : n.t==="boss" ? `<span class="tag-mini boss">👹 BOSS</span>`
                    : n.t==="elite" ? `<span class="tag-mini elite">💀 ELITE</span>`
                    : "";
+  const nodeName = n.name_local && n.name_local[L()] ? n.name_local[L()] : n.name;
   return `<button class="${cls}" data-node="${n.id}" onclick="openBrief('${n.id}')">
     <div class="ntop">
       <div class="sprite">${done?"✅":(open?n.s:"🔒")}</div>
       <div class="meta">
-        <b>${esc(n.name)}</b>
+        <b>${esc(nodeName)}</b>
         <span>${nodeTypeLabel(n)} · Nv${n.tier}</span>
       </div>
     </div>
@@ -387,7 +442,7 @@ function nodeHTML(n){
       <div class="bar"><i style="width:${p}%"></i></div>
       <span>${p}%</span>
     </div>
-    <div style="margin-top:8px">${tag || (open?`<span class="tag-mini" style="background:rgba(255,153,0,.14);color:var(--orange-soft);border:1px solid rgba(255,153,0,.3)">DISPONIBLE</span>`:"")}</div>
+    <div style="margin-top:8px">${tag || (open?`<span class="tag-mini" style="background:rgba(255,153,0,.14);color:var(--orange-soft);border:1px solid rgba(255,153,0,.3)">${t("DISPONIBLE","AVAILABLE")}</span>`:"")}</div>
   </button>`;
 }
 /* líneas que conectan prerequisites */
@@ -456,25 +511,25 @@ function openBrief(id){
         </div>
         <div class="lore">${esc(n.lore)}</div>
         <div class="attrs">
-          <div class="attr"><div class="l">Nivel</div><div class="v">Nv ${n.tier}</div></div>
-          <div class="attr"><div class="l">Desafíos</div><div class="v">${totalHp}</div></div>
-          <div class="attr"><div class="l">Vidas</div><div class="v">${n.t==="boss"?4:n.t==="elite"?3:2}</div></div>
-          <div class="attr"><div class="l">Recompensa</div><div class="v">${n.xp} XP</div></div>
-          <div class="attr"><div class="l">Tu mejor</div><div class="v">${pct(id)}%</div></div>
+          <div class="attr"><div class="l">${t("Nivel","Level")}</div><div class="v">Nv ${n.tier}</div></div>
+          <div class="attr"><div class="l">${t("Desafíos","Challenges")}</div><div class="v">${totalHp}</div></div>
+          <div class="attr"><div class="l">${t("Vidas","Lives")}</div><div class="v">${n.t==="boss"?4:n.t==="elite"?3:2}</div></div>
+          <div class="attr"><div class="l">${t("Recompensa","Reward")}</div><div class="v">${n.xp} XP</div></div>
+          <div class="attr"><div class="l">${t("Tu mejor","Your best")}</div><div class="v">${pct(id)}%</div></div>
         </div>
         <div class="reqs">
-          <div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:var(--soft);text-transform:uppercase">Requisitos</div>
+          <div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:var(--soft);text-transform:uppercase">${t("Requisitos","Requirements")}</div>
           ${n.req.length ? n.req.map(rid=>{
             const ok = pct(rid) >= PASS_PCT;
-            return `<div class="req ${ok?"ok":"no"}">${ok?"✅":"🔒"} ${esc(nodeOf(rid).name)} — ${ok?"superado ("+pct(rid)+"%)":"necesitas "+PASS_PCT+"%"}</div>`;
-          }).join("") : `<div class="req ok">✅ Sin requisitos — nodo raíz</div>`}
+            return `<div class="req ${ok?"ok":"no"}">${ok?"✅":"🔒"} ${esc(nodeOf(rid).name)} — ${ok?t("superado","cleared")+" ("+pct(rid)+"%)":"necesitas "+PASS_PCT+"%"}</div>`;
+          }).join("") : `<div class="req ok">✅ ${t("Sin requisitos — nodo raíz","No requirements — root node")}</div>`}
         </div>
         <div class="itemrow">
-          ${open ? `<button class="btn btn-primary" onclick="startBattle('${id}')">⚔️ ${done?"Repetir combate":"Combatir"}</button>`
-                 : `<button class="btn" disabled>🔒 Bloqueado</button>`}
-          <button class="btn btn-ghost" onclick="openMap()">← Volver al mapa</button>
+          ${open ? `<button class="btn btn-primary" onclick="startBattle('${id}')">⚔️ ${done?t("Repetir combate","Repeat battle"):t("Combatir","Battle")}</button>`
+                 : `<button class="btn" disabled>🔒 ${t("Bloqueado","Locked")}</button>`}
+          <button class="btn btn-ghost" onclick="openMap()">← ${t("Volver al mapa","Back to map")}</button>
         </div>
-        ${done?`<div class="best" style="margin-top:16px;font-size:14px;color:var(--green)">Ya superaste este nodo con ${pct(id)}%. Puedes repetirlo para mejorar tu marca.</div>`:""}
+        ${done?`<div class="best" style="margin-top:16px;font-size:14px;color:var(--green)">${t("Ya superaste este nodo con ","You already cleared this node with ")}${pct(id)}%. ${t("Puedes repetirlo para mejorar tu marca.","You can repeat it to improve your score.")}</div>`:""}
       </div>
     </div>
   </div>` + invHTML();
@@ -493,9 +548,9 @@ const B = {
 function startBattle(id, opts){
   opts = opts || {};
   const n = nodeOf(id);
-  if(!n){ toast("Nodo no encontrado"); return; }
+  if(!n){ toast(t("Nodo no encontrado","Node not found")); return; }
   const pool = allQuestionsFor(n);
-  if(!pool.length){ toast("Ese nodo no tiene preguntas"); return; }
+  if(!pool.length){ toast(t("Ese nodo no tiene preguntas","That node has no questions")); return; }
   B.node = n;
   B.qs = shuffle(pool);
   B.idx = 0;
@@ -541,23 +596,23 @@ function battleTopHTML(){
     const cls = i<B.kills?"done":(i===B.idx?"now":"");
     return `<i class="${cls}"></i>`;
   }).join("");
-  const t = B.tmax ? `<div class="stat timer-pill pill ${B.tleft<=5?"low":""}"><span>⏱️</span><span>${Math.max(0,Math.ceil(B.tleft))}s</span></div>` : "";
+  const timerHTML = B.tmax ? `<div class="stat timer-pill pill ${B.tleft<=5?"low":""}"><span>⏱️</span><span>${Math.max(0,Math.ceil(B.tleft))}s</span></div>` : "";
   return `<div class="arena-top">
     <div class="enemy-box">
       <div class="es" id="enemySprite">${n.s}</div>
       <div class="ei">
-        <div class="en">${esc(n.name)}</div>
+        <div class="en">${esc(n.name_local && n.name_local[L()] ? n.name_local[L()] : n.name)}</div>
         <div class="ty">${nodeTypeLabel(n)} · ${realmOf(n.r).name}</div>
         <div class="hpbar ${barCls}"><i id="ehp" style="width:${B.ehp>0?Math.round(B.ehp/B.emax*100):0}%"></i></div>
         <div class="turns" style="margin-top:7px">${turnMarks}</div>
       </div>
     </div>
-    ${t}
+    ${timerHTML}
     <div class="fighter">
       <div class="fs">🧑‍💻</div>
       <div class="fi">
         <b>${rank().cur.name}</b>
-        <span>${B.noDamage?"Modo simulacro":"Vidas"} <span id="bLives">${B.noDamage?"🛡️ sin daño":hearts(B.lives)}</span></span>
+        <span>${B.noDamage?t("Modo simulacro","Drill mode"):t("Vidas","Lives")} <span id="bLives">${B.noDamage?"🛡️ "+t("sin daño","no damage"):hearts(B.lives)}</span></span>
         <div class="hpbar" style="margin-top:6px;height:10px">${B.noDamage?"":`<i id="php" style="width:${Math.min(100,B.lives/B.maxLives*100)}%;background:linear-gradient(90deg,#6BC853,#2E9B3A)"></i>`}</div>
       </div>
       <div style="text-align:right;font-size:12px;color:var(--muted);font-weight:800">
@@ -580,6 +635,8 @@ function renderQuestion(){
   if(chType(c)==="match") return renderMatch(c);
   if(chType(c)==="wordsearch") return renderWordSearch(c);
   if(chType(c)==="crossword") return renderCrossword(c);
+  if(chType(c)==="memory") return renderMemory(c);
+  if(chType(c)==="hangman") return renderHangman(c);
   return renderQuiz(c);
 }
 
@@ -590,20 +647,20 @@ function qmetaHTML(){
   return `<div class="qmeta">
     <span class="chip req">⚔️ ${nodeTypeLabel(B.node)}</span>
     <span class="chip rpl">${realmOf(B.node.r).sprite} ${esc(realmOf(B.node.r).name)}</span>
-    <span class="chip n">GOLPE ${B.idx+1} / ${B.qs.length}</span>
+    <span class="chip n">${t("GOLPE","HIT")} ${B.idx+1} / ${B.qs.length}</span>
   </div>`;
 }
 
 /* ----- controles compartidos: ítems + botón "Siguiente golpe" ----- */
 function challengeControlsHTML(hint){
   return `<div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;align-items:center">
-    <button class="btn btn-primary hidden" id="nextBtn" onclick="nextHit()">Siguiente golpe →</button>
-    <span style="font-size:13px;color:var(--soft)">${hint||"Atajos: 1-4 · Enter para continuar"}</span>
+    <button class="btn btn-primary hidden" id="nextBtn" onclick="nextHit()">${t("Siguiente golpe →","Next hit →")}</button>
+    <span style="font-size:13px;color:var(--soft)">${hint||t("Atajos: A-B-C-D · Enter para continuar","Shortcuts: A-B-C-D · Enter to continue")}</span>
     <span style="margin-left:auto"></span>
     <button class="btn btn-sm" onclick="useItem('potion')">🧪 ${P.inv.potion}</button>
     <button class="btn btn-sm" onclick="useItem('shield')">🛡️ ${P.inv.shield}</button>
     <button class="btn btn-sm" onclick="useItem('oracle')">🔮 ${P.inv.oracle}</button>
-    <button class="btn btn-sm btn-ghost" onclick="quitBattle()">🏃 Huir</button>
+    <button class="btn btn-sm btn-ghost" onclick="quitBattle()">🏃 ${t("Huir","Flee")}</button>
   </div>`;
 }
 
@@ -621,18 +678,23 @@ function startTurnTimer(){
 }
 
 /* ---------- RENDER: QUIZ (pregunta de opción múltiple) ---------- */
+/* c[2] puede ser un índice (una respuesta) o un array de índices (multi-select). */
 function renderQuiz(c){
   const opts = c[1].split("|");
   const letters = ["A","B","C","D"];
+  const multi = Array.isArray(c[2]);
+  B.picked = multi ? new Set() : null;
   app.innerHTML = hudHTML() + `<div class="card screen">
     ${battleTopHTML()}
     <div class="qcard">
       ${qmetaHTML()}
-      <div class="q">${fmtQ(c[0])}</div>
+      ${multi ? `<div class="q"><span class="multi-badge">☑ ${t("Selecciona todas las correctas","Select all that apply")}</span> ${fmtQ(c[0])}</div>`
+              : `<div class="q">${fmtQ(c[0])}</div>`}
       <div class="opts" id="opts">
-        ${opts.map((o,i)=>`<button class="opt" id="opt${i}" onclick="answer(${i})">
-          <span class="letter">${letters[i]}</span><span>${esc(o)}</span></button>`).join("")}
+        ${opts.map((o,i)=>`<button class="opt" id="opt${i}" onclick="${multi?`toggleOpt(${i})`:`answer(${i})`}">
+          <span class="letter">${multi?`<span id="chk${i}">☐</span>`:letters[i]}</span><span>${esc(o)}</span></button>`).join("")}
       </div>
+      ${multi ? `<button class="btn btn-primary" id="confirmBtn" style="margin-top:14px;width:100%" onclick="confirmAnswer()">✓ ${t("Confirmar selección","Confirm selection")}</button>` : ""}
       <div class="logline" id="log"></div>
       ${challengeControlsHTML()}
     </div>
@@ -645,11 +707,20 @@ function renderQuiz(c){
 
 function battleKeys(e){
   if(!B.node) return;
-  if(["1","2","3","4"].includes(e.key)){
-    const b = document.getElementById("opt"+(+e.key-1));
-    if(b && !b.disabled && !B.answered) answer(+e.key-1);
+  /* teclas A/B/C/D responden las opciones 0-3 (case-insensitive) */
+  const k = e.key.toLowerCase();
+  const idx = ["a","b","c","d"].indexOf(k);
+  if(idx !== -1){
+    const b = document.getElementById("opt"+idx);
+    if(b && !b.disabled && !B.answered){
+      const c = B.qs[B.idx];
+      if(Array.isArray(c) && Array.isArray(c[2])) toggleOpt(idx);
+      else answer(idx);
+    }
   }
   if(e.key==="Enter"){
+    const c = B.qs[B.idx];
+    if(Array.isArray(c) && Array.isArray(c[2]) && !B.answered){ confirmAnswer(); return; }
     const nb = document.getElementById("nextBtn");
     if(nb && !nb.classList.contains("hidden")) nextHit();
   }
@@ -657,12 +728,13 @@ function battleKeys(e){
 
 function removeTwoOptions(){
   const q = B.qs[B.idx];
-  const wrong = [0,1,2,3].filter(i=>i!==q[2]);
+  const correct = Array.isArray(q[2]) ? new Set(q[2]) : new Set([q[2]]);
+  const wrong = [0,1,2,3].filter(i=>!correct.has(i));
   shuffle(wrong).slice(0,2).forEach(i=>{
     const b = document.getElementById("opt"+i);
     if(b){ b.disabled = true; b.style.opacity = ".2"; b.style.filter = "grayscale(1)"; }
   });
-  toast("🔮 El Oráculo reduce las opciones");
+  toast(t("🔮 El Oráculo reduce las opciones","🔮 The Oracle removes two options"));
 }
 
 /* ---------- resolver el reto actual: compartido por quiz y puzles ---------- */
@@ -686,11 +758,11 @@ function hit(c, expl){
   const log = document.getElementById("log");
   log.className = "logline ok";
   log.innerHTML = `<span class="big">${crit?"💥":"✅"}</span>
-    <div><b>${crit?"¡Golpe crítico!":"¡Impacto!"}</b> · ${esc(expl)}</div>
-    <div class="dmg"><div class="${crit?"dmg-crit":"dmg-num"}">-1 HP enemigo${crit?" · doble XP":""}</div>
-    <div style="font-size:12px;color:var(--muted);font-weight:800">🔥 Combo ${B.combo}</div></div>`;
+    <div><b>${crit?t("¡Golpe crítico!","Critical hit!"):t("¡Impacto!","Impact!")}</b> · ${esc(expl)}</div>
+    <div class="dmg"><div class="${crit?"dmg-crit":"dmg-num"}">-1 HP ${t("enemigo","enemy")}${crit?" · "+t("doble XP","double XP"):""}</div>
+    <div style="font-size:12px;color:var(--muted);font-weight:800">🔥 ${t("Combo","Combo")} ${B.combo}</div></div>`;
   if(B.ehp<=0){
-    log.innerHTML += `<div style="width:100%;margin-top:6px;color:var(--green);font-weight:800">☠️ ¡Enemigo derrotado!</div>`;
+    log.innerHTML += `<div style="width:100%;margin-top:6px;color:var(--green);font-weight:800">☠️ ${t("¡Enemigo derrotado!","Enemy defeated!")}</div>`;
     endTurnWin();
   }
   showNextBtn();
@@ -711,22 +783,22 @@ function missHit(c, icon, title, expl){
   if(B.noDamage){
     log.className = "logline bad";
     log.innerHTML = `<span class="big">📌</span>
-      <div><b>Reporte (simulacro)</b> · ${esc(expl)}</div>
-      <div class="dmg"><div style="font-size:13px;color:var(--muted);font-weight:800">Combo perdido</div></div>`;
+      <div><b>${t("Reporte (simulacro)","Drill report")}</b> · ${esc(expl)}</div>
+      <div class="dmg"><div style="font-size:13px;color:var(--muted);font-weight:800">${t("Combo perdido","Combo lost")}</div></div>`;
   }else if(B.shieldOn){
     B.shieldOn = false;
     log.className = "logline ok";
     log.innerHTML = `<span class="big">🛡️</span>
-      <div><b>El Escudo de AWS absorbió el golpe</b> · ${esc(expl)}</div>`;
+      <div><b>${t("El Escudo de AWS absorbió el golpe","The AWS Shield absorbed the hit")}</b> · ${esc(expl)}</div>`;
   }else if(B.lives>0){
     B.lives--;
     const lb = document.getElementById("bLives"); if(lb) lb.innerHTML = hearts(B.lives);
     const pb = document.getElementById("php"); if(pb) pb.style.width = Math.round(B.lives/B.maxLives*100)+"%";
     log.className = "logline bad";
     log.innerHTML = `<span class="big">${icon||"💔"}</span>
-      <div><b>${esc(title||"¡Golpe recibido!")}</b> · ${esc(expl)}</div>
-      <div class="dmg"><div class="dmg-num" style="color:var(--red)">-1 vida</div>
-      <div style="font-size:12px;color:var(--muted);font-weight:800">Combo perdido</div></div>`;
+      <div><b>${esc(title||t("¡Golpe recibido!","Hit received!"))}</b> · ${esc(expl)}</div>
+      <div class="dmg"><div class="dmg-num" style="color:var(--red)">-1 ${t("vida","life")}</div>
+      <div style="font-size:12px;color:var(--muted);font-weight:800">${t("Combo perdido","Combo lost")}</div></div>`;
     if(B.lives<=0){ finishBattle(false); return; }
   }
   showNextBtn();
@@ -734,7 +806,7 @@ function missHit(c, icon, title, expl){
 
 function showNextBtn(){
   const nb = document.getElementById("nextBtn");
-  if(nb){ nb.classList.remove("hidden"); nb.textContent = (B.ehp<=0)?"Cobrar victoria →":"Siguiente golpe →"; }
+  if(nb){ nb.classList.remove("hidden"); nb.textContent = (B.ehp<=0)?t("Cobrar victoria →","Claim victory →"):t("Siguiente golpe →","Next hit →"); }
 }
 
 /* ---------- RENDER: EMPAREJAR (matching) ---------- */
@@ -868,13 +940,13 @@ function renderWordSearch(c){
     <div class="qcard">
       ${qmetaHTML()}
       <div class="ch-head"><span class="ch-ico">🔍</span> ${esc(c.title)}</div>
-      <div class="ch-sub">${esc(c.hint)} · clic en la 1ª y la última letra · los fallos restan 5s, no vidas</div>
+      <div class="ch-sub">${esc(c.hint)} · ${t("clic en la 1ª y la última letra · los fallos restan 5s, no vidas","click the 1st and last letter · mistakes cost 5s, not lives")}</div>
       <div class="wswrap">
         <div class="wsgrid" style="--ws-cols:${W}">${cells}</div>
         <div class="wslist" id="wslist">${wlist}</div>
       </div>
       <div class="logline" id="log"></div>
-      ${challengeControlsHTML("Línea recta: horizontal, vertical o diagonal")}
+      ${challengeControlsHTML(t("Línea recta: horizontal, vertical o diagonal","Straight line: horizontal, vertical, or diagonal"))}
     </div>
   </div>` + invHTML();
   startTurnTimer();
@@ -983,7 +1055,7 @@ function wsPenalty(c, msg){
   B.tleft = Math.max(0, (B.tleft === undefined ? B.tmax : B.tleft) - 5);
   const pill = document.querySelector(".timer-pill span:last-child");
   if(pill) pill.textContent = Math.max(0, Math.ceil(B.tleft))+"s";
-  toast("⏱️ -5s · " + (msg || "fallo"));
+  toast("⏱️ -5s · " + (msg || t("fallo","mistake")));
   /* nota: NO se toca B.answered ni B.combo → el reto sigue activo */
 }
 
@@ -1067,7 +1139,7 @@ function xwSubmit(){
   const c = st.c;
   const inp=document.getElementById("xwinput");
   const val = String((inp && inp.value) || "").toUpperCase().trim();
-  if(!val){ toast("Escribe la respuesta primero"); return; }
+  if(!val){ toast(t("Escribe la respuesta primero","Enter the answer first")); return; }
   const w = st.active;
   if(val===w.pat){
     st.done.add(w.num+w.dir);
@@ -1086,17 +1158,190 @@ function xwSubmit(){
     }
   }else{
     B.answered=true; clearInterval(B.timer);
-    missHit(c, "💔", "Respuesta incorrecta", "Pista: "+w.clue);
+    missHit(c, "💔", t("Respuesta incorrecta","Wrong answer"), t("Pista","Hint")+": "+w.clue);
+  }
+}
+
+/* ---------- RENDER: MEMORIA (parejas de cartas boca-abajo) ---------- */
+function renderMemory(c){
+  B.sub = B.sub || {};
+  B.sub.mem = {
+    c, cards:c.cards, flipped:[], matched:new Set(),
+    attempts:3, done:0, total:c.cards.length/2,
+    colors:MATCH_COLORS.slice()
+  };
+  const grid = c.cards.map((cd,k)=>{
+    const found = false; // se actualizará en runtime
+    return `<button class="memcard" id="mem${k}" data-i="${cd.i}" data-side="${cd.side}" onclick="memPick(${k})"><span class="memface memback">?</span><span class="memface memfront">${esc(cd.txt)}</span></button>`;
+  }).join("");
+  app.innerHTML = hudHTML() + `<div class="card screen">
+    ${battleTopHTML()}
+    <div class="qcard">
+      ${qmetaHTML()}
+      <div class="ch-head"><span class="ch-ico">🃏</span> ${esc(c.title)}</div>
+      <div class="ch-sub">${esc(c.hint)} · clic en 2 cartas para revelar las parejas · 3 intentos</div>
+      <div class="memgrid" id="memgrid">${grid}</div>
+      <div class="memstats"><span>Intentos: <b id="memAttempts">3</b></span><span>Parejas: <b id="memPairs">0</b>/${B.sub.mem.total}</span></div>
+      <div class="logline" id="log"></div>
+      ${challengeControlsHTML("Las parejas correctas se quedan boca arriba")}
+    </div>
+  </div>` + invHTML();
+  startTurnTimer();
+  refreshInventory();
+}
+function memPaint(el, state, color){
+  if(!el) return;
+  el.classList.remove("sel","err","ok");
+  if(state==="back"){ el.style.cssText = "background:#12223a !important;color:var(--orange) !important;border-color:var(--edge)"; }
+  else if(state==="flip"){ el.style.cssText = "background:#1b3057 !important;color:#fff !important;border-color:var(--blue)"; }
+  else if(state==="ok"){ el.style.cssText = "background:"+(color||"#6BC853")+" !important;color:#0b1729 !important;border-color:"+(color||"#6BC853"); }
+  else if(state==="err"){ el.style.cssText = "background:#ff5a5a !important;color:#fff !important;border-color:#ff5a5a"; }
+}
+function memPick(k){
+  if(B.answered) return;
+  const st = B.sub.mem; if(!st) return;
+  const c = st.c;
+  if(k<0 || k>=st.cards.length) return;
+  const cd = st.cards[k];
+  /* ya está emparejada de forma permanente */
+  if(st.matched.has(k)) return;
+  /* re-clic sobre la única carta volteada: la deselecciona (vuelve boca abajo) */
+  if(st.flipped.length===1 && st.flipped[0]===k){
+    st.flipped = [];
+    memPaint(document.getElementById("mem"+k), "back");
+    return;
+  }
+  /* ya hay 2 cartas volteadas esperando evaluar: bloquear más clics */
+  if(st.flipped.length >= 2) return;
+  if(st.flipped.includes(k)) return;
+  const el = document.getElementById("mem"+k);
+  /* mostrar la cara frontal */
+  el.classList.add("sel");
+  memPaint(el, "flip");
+  st.flipped.push(k);
+  if(st.flipped.length < 2) return;
+  /* segundo clic: evaluar pareja */
+  const [i,j] = st.flipped;
+  const a = st.cards[i], b = st.cards[j];
+  const elI = document.getElementById("mem"+i);
+  const elJ = document.getElementById("mem"+j);
+  if(a.i === b.i && a.side !== b.side){
+    /* pareja correcta: boca arriba permanente con el color del pool */
+    const color = st.colors.shift();
+    st.matched.add(i); st.matched.add(j);
+    memPaint(elI, "ok", color);
+    memPaint(elJ, "ok", color);
+    st.done++;
+    st.flipped = [];
+    sfx.hit();
+    document.getElementById("memPairs").textContent = st.done;
+    if(st.done === st.total){
+      B.answered = true; clearInterval(B.timer);
+      hit(c, "¡Memoria completada!");
+    }
+  }else{
+    /* par incorrecto: destello rojo breve y vuelven a estar boca-abajo. El
+       estado se limpia al instante para que el siguiente clic funcione ya;
+       la reversión visual se programa aparte sin tocar st.flipped. */
+    memPaint(elI, "err"); memPaint(elJ, "err");
+    sfx.miss();
+    st.attempts--;
+    st.flipped = [];
+    document.getElementById("memAttempts").textContent = st.attempts;
+    setTimeout(()=>{
+      memPaint(elI, "back"); memPaint(elJ, "back");
+    }, 700);
+    if(st.attempts <= 0){
+      B.answered = true; clearInterval(B.timer);
+      missHit(c, "💔", "¡Sin intentos!", c.hint);
+    }
+  }
+}
+
+/* ---------- RENDER: AHORCADO (letras A-Z) ---------- */
+const HANG_LIVES = 6;
+function renderHangman(c){
+  B.sub = B.sub || {};
+  const word = c.word;
+  const revealed = {};   /* letra -> true si fue adivinada */
+  for(const ch of word) revealed[ch] = false;
+  B.sub.hang = {
+    c, word, revealed, lives:HANG_LIVES,
+    picked:new Set(), guessed:new Set()
+  };
+  const cellsHTML = word.split("").map((ch,i)=>{
+    const isSpace = ch === " ";
+    return `<span class="hangcell ${isSpace?"hangspace":""}" id="hangw${i}">${isSpace?"&nbsp;":(revealed[ch]?ch:"")}</span>`;
+  }).join("");
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  const letterBtns = letters.map(L=>`<button class="hangletter" id="hangL${L}" onclick="hangPick('${L}')">${L}</button>`).join("");
+  app.innerHTML = hudHTML() + `<div class="card screen">
+    ${battleTopHTML()}
+    <div class="qcard">
+      ${qmetaHTML()}
+      <div class="ch-head"><span class="ch-ico">💀</span> ${esc(c.title)}</div>
+      <div class="ch-sub">${word.length} letras · ${HANG_LIVES} vidas</div>
+      <div class="hangclue">💡 <b>${t("Pista:","Hint:")}</b> ${esc(HANG_CLUES[word] || c.hint || t("Adivina el término AWS","Guess the AWS term"))}</div>
+      <div class="hangword" id="hangword">${cellsHTML}</div>
+      <div class="hanglives" id="hanglives">${"❤️".repeat(HANG_LIVES)}</div>
+      <div class="hanggrid">${letterBtns}</div>
+      <div class="logline" id="log"></div>
+      ${challengeControlsHTML(t("Adivina letras antes de quedarte sin vidas","Guess letters before you run out of lives"))}
+    </div>
+  </div>` + invHTML();
+  startTurnTimer();
+  refreshInventory();
+}
+function hangPick(L){
+  if(B.answered) return;
+  const st = B.sub.hang; if(!st) return;
+  const c = st.c;
+  if(st.picked.has(L)) return;
+  st.picked.add(L);
+  const btn = document.getElementById("hangL"+L);
+  if(btn){ btn.disabled = true; }
+  const inWord = c.word.includes(L);
+  const livesEl = document.getElementById("hanglives");
+  if(inWord){
+    /* acierto: revelar todas las apariciones de la letra */
+    st.guessed.add(L);
+    for(let i=0;i<c.word.length;i++){
+      if(c.word[i]===L){
+        const cell = document.getElementById("hangw"+i);
+        if(cell && !c.word[i].match(/\s/)) cell.textContent = L;
+      }
+    }
+    if(btn){ btn.style.cssText = "background:var(--green) !important;color:#0b1729 !important;border-color:var(--green)"; }
+    sfx.hit();
+    /* victoria: ¿adivinó toda la palabra? */
+    if(c.word.split("").every(ch => ch.match(/\s/) || st.guessed.has(ch))){
+      B.answered = true; clearInterval(B.timer);
+      hit(c, `¡${c.word}!`);
+    }
+  }else{
+    /* fallo: pierde una vida */
+    st.lives--;
+    if(btn){ btn.style.cssText = "background:#ff5a5a !important;color:#fff !important;border-color:#ff5a5a !important"; }
+    if(livesEl){ livesEl.textContent = "❤️".repeat(Math.max(0,st.lives)) + "🖤".repeat(Math.max(0,HANG_LIVES-st.lives)); }
+    sfx.miss();
+    shake();
+    if(st.lives <= 0){
+      B.answered = true; clearInterval(B.timer);
+      missHit(c, "💀", `La palabra era ${c.word}`, c.hint);
+    }
   }
 }
 
 /* ---------- RESPUESTA A PREGUNTA DE QUIZ ---------- */
+/* Single-select: clic resuelve al instante. Multi-select: toggleOpt marca/desmarca
+   y confirmAnswer compara el conjunto elegido con el conjunto correcto. */
 function answer(i){
   if(B.answered) return;
   const c = B.qs[B.idx];
   if(!c){ finishBattle(true); return; }
   /* los retos no-quiz se resuelven con sus propios controles */
   if(!Array.isArray(c)) return;
+  if(Array.isArray(c[2])){ toggleOpt(i); return; } /* multi: solo marca */
   B.answered = true;
   clearInterval(B.timer);
   const ok = i === c[2];
@@ -1110,15 +1355,55 @@ function answer(i){
   refreshInventory();
 }
 
+/* Marca/desmarca una opción en preguntas multi-select (no evalúa todavía). */
+function toggleOpt(i){
+  if(B.answered) return;
+  const c = B.qs[B.idx];
+  if(!Array.isArray(c) || !Array.isArray(c[2]) || !B.picked) return;
+  if(B.picked.has(i)) B.picked.delete(i); else B.picked.add(i);
+  const el = document.getElementById("opt"+i);
+  const chk = document.getElementById("chk"+i);
+  if(el) el.classList.toggle("picked", B.picked.has(i));
+  if(chk) chk.textContent = B.picked.has(i) ? "☑" : "☐";
+}
+
+/* Evalúa una pregunta multi-select: debe coincidir el conjunto exacto. */
+function confirmAnswer(){
+  if(B.answered) return;
+  const c = B.qs[B.idx];
+  if(!Array.isArray(c) || !Array.isArray(c[2]) || !B.picked) return;
+  if(B.picked.size === 0){ toast(t("Selecciona al menos una opción","Select at least one option")); return; }
+  B.answered = true;
+  clearInterval(B.timer);
+  const correct = new Set(c[2]);
+  const ok = B.picked.size === correct.size && [...B.picked].every(i=>correct.has(i));
+  const els = document.querySelectorAll(".opt");
+  els.forEach((el,j)=>{
+    el.disabled = true;
+    el.classList.remove("picked");
+    if(correct.has(j)) el.classList.add("correct");
+    else if(B.picked.has(j)) el.classList.add("wrong");
+    else el.classList.add("dim");
+    const chk = document.getElementById("chk"+j);
+    if(chk) chk.textContent = correct.has(j) ? "✓" : (B.picked.has(j) ? "✗" : "");
+  });
+  const cb = document.getElementById("confirmBtn");
+  if(cb) cb.disabled = true;
+  if(ok) hit(c, c[3]);
+  else missHit(c, "💔", "¡Golpe recibido!", c[3]);
+  refreshInventory();
+}
+
 function onTimeout(){
   const c = B.qs[B.idx];
   if(!c){ finishBattle(true); return; }
   if(Array.isArray(c)){
+    const correct = Array.isArray(c[2]) ? new Set(c[2]) : new Set([c[2]]);
     const els = document.querySelectorAll(".opt");
-    els.forEach((el,j)=>{ el.disabled=true; el.classList.add(j===c[2]?"correct":"dim"); });
+    els.forEach((el,j)=>{ el.disabled=true; el.classList.add(correct.has(j)?"correct":"dim"); });
   }
   B.answered = true; clearInterval(B.timer);
-  missHit(c, "⏰", "¡Se acabó el tiempo!", c[3] || "");
+  missHit(c, "⏰", t("¡Se acabó el tiempo!","Time is up!"), c[3] || "");
 }
 
 function endTurnWin(){
@@ -1138,30 +1423,42 @@ function nextHit(){
 function useItem(id){
   const it = ITEM_LIST.find(i=>i.id===id);
   if(!it) return;
-  if((P.inv[id]||0) <= 0){ toast("No tienes "+it.name); return; }
-  if(!B.node){ toast("Solo usable durante un combate"); return; }
-  if(B.answered){ toast("Espera a la próxima pregunta"); return; }
+  if((P.inv[id]||0) <= 0){ toast(t("No tienes ","You don't have ")+iname(it)); return; }
+  if(!B.node){ toast(t("Solo usable durante un combate","Only usable during battle")); return; }
+  if(B.answered){ toast(t("Espera a la próxima pregunta","Wait for the next question")); return; }
   if(B.itemLock){ return; }
 
   if(id==="potion"){
-    if(B.lives >= B.maxLives){ toast("Ya tienes todas las vidas"); return; }
+    if(B.lives >= B.maxLives){ toast(t("Ya tienes todas las vidas","You already have all your lives")); return; }
     P.inv.potion--; B.lives++;
     sfx.coin();
     const lb = document.getElementById("bLives"); if(lb) lb.innerHTML = hearts(B.lives);
     const pb = document.getElementById("php"); if(pb) pb.style.width = Math.round(B.lives/B.maxLives*100)+"%";
-    toast("🧪 Recuperaste una vida");
+    toast(t("🧪 Recuperaste una vida","🧪 You recovered a life"));
   }
   if(id==="shield"){
-    if(B.shieldOn){ toast("El escudo ya está activo"); return; }
+    if(B.shieldOn){ toast(t("El escudo ya está activo","The shield is already active")); return; }
     P.inv.shield--; B.shieldOn = true;
     sfx.coin();
-    toast("🛡️ Escudo activo: absorbe un error");
+    toast(t("🛡️ Escudo activo: absorbe un error","🛡️ Shield active: absorbs one mistake"));
   }
   if(id==="oracle"){
     const c = B.qs[B.idx];
-    if(!c || !Array.isArray(c)){ toast("🔮 El Oráculo solo actúa sobre preguntas"); return; }
+    if(!c || !Array.isArray(c)){ toast(t("🔮 El Oráculo solo actúa sobre preguntas","🔮 The Oracle only works on questions")); return; }
     P.inv.oracle--;
     removeTwoOptions();
+    sfx.coin();
+  }
+  if(id==="scroll"){
+    const c = B.qs[B.idx];
+    if(!c || !Array.isArray(c)){ toast(t("📜 El Pergamino solo actúa sobre preguntas","📜 The Scroll only works on questions")); return; }
+    P.inv.scroll--;
+    const ok = document.getElementById("opt"+ (Array.isArray(c[2]) ? c[2][0] : c[2]));
+    if(ok){
+      ok.style.cssText = "background:#6BC853 !important;color:#0b1729 !important;border-color:#6BC853 !important";
+      setTimeout(()=>{ ok.style.cssText = ""; }, 5000);
+    }
+    toast(t("📜 Respuesta revelada (5s)","📜 Answer revealed (5s)"));
     sfx.coin();
   }
   save();
@@ -1203,10 +1500,17 @@ function finishBattle(won){
     if(maxPct>=70 || n.t==="boss") launchConfetti(n.t==="boss"?260:150);
     sfx.coin();
 
-    /* loot: el entrenamiento no reparte objetos, para no romper la economía */
+    /* loot: elites y bosses siempre sueltan objetos (motivación para usar
+       pociones); los enemigos tienen 34% de drop. El entrenamiento no reparte
+       objetos para no romper la economía. */
     if(!free){
-      if(Math.random() < 0.34) loot.push(pickItem());
-      if(n.t!=="enemy" && Math.random() < 0.42) loot.push(pickItem());
+      if(n.t==="boss"){
+        loot.push(pickItem()); loot.push(pickItem());   /* bosses: 2 drops garantizados */
+      }else if(n.t==="elite"){
+        loot.push(pickItem());                          /* elites: 1 drop garantizado */
+      }else{
+        if(Math.random() < 0.34) loot.push(pickItem());
+      }
       NODES.forEach(o=>{
         if(!isCleared(o.id) && unlocked(o.id) && (o.req||[]).includes(n.id)) unlockedList.push(o);
       });
@@ -1222,7 +1526,7 @@ function finishBattle(won){
   /* nunca dejes al jugador sin vidas: al llegar a 0 se repone a 1 */
   if(!free && P.lives < 1){
     P.lives = 1;
-    setTimeout(()=>toast("❤️ Te han dejado 1 vida. Repón en la tienda."), 700);
+    setTimeout(()=>toast(t("❤️ Te han dejado 1 vida. Repón en la tienda.","❤️ You were left with 1 life. Restore it at the shop.")), 700);
   }
 
   /* devuelve los ítems usados a la cuenta */
@@ -1234,51 +1538,51 @@ function finishBattle(won){
   app.innerHTML = hudHTML() + `<div class="card result screen">
     <div class="rc ${won?"":"lose"}">
       <div class="pct">${maxPct}%</div>
-      <div class="lbl">${passed?"victoria":(won?"casi":"derrota")}</div>
+      <div class="lbl">${t(passed?"victoria":(won?"casi":"derrota"),passed?"victory":(won?"close":"defeat"))}</div>
     </div>
     <h2>${verdictTitle(maxPct, passed, n)}</h2>
     <div class="rank-line" style="color:${passed?"var(--orange-soft)":"var(--red)"}">${esc(n.s)} ${esc(n.name)}</div>
-    ${!passed && won ? `<div class="best" style="margin-top:10px">Necesitas al menos ${PASS_PCT}% para superar este nodo.</div>`:""}
-    ${passed && !newBest ? `<div class="best" style="margin-top:10px">Récord de este nodo: <b>${prevBest}%</b></div>`:""}
-    ${newBest && passed ? `<div class="best" style="margin-top:10px;color:var(--gold)">🎉 ¡Nuevo récord en este nodo!</div>`:""}
+    ${!passed && won ? `<div class="best" style="margin-top:10px">${t("Necesitas al menos ","You need at least ")}${PASS_PCT}% ${t("para superar este nodo.","to clear this node.")}</div>`:""}
+    ${passed && !newBest ? `<div class="best" style="margin-top:10px">${t("Récord de este nodo:","Record for this node:")} <b>${prevBest}%</b></div>`:""}
+    ${newBest && passed ? `<div class="best" style="margin-top:10px;color:var(--gold)">🎉 ${t("¡Nuevo récord en este nodo!","New record for this node!")}</div>`:""}
 
     <div class="stats">
-      <div class="sbox"><div class="n">${B.hits}/${B.emax}</div><div class="l">Aciertos</div></div>
-      <div class="sbox"><div class="n ${B.crits?"good":""}">${B.crits}</div><div class="l">Críticos</div></div>
-      <div class="sbox"><div class="n">${B.bestCombo}</div><div class="l">Combo máx</div></div>
+      <div class="sbox"><div class="n">${B.hits}/${B.emax}</div><div class="l">${t("Aciertos","Hits")}</div></div>
+      <div class="sbox"><div class="n ${B.crits?"good":""}">${B.crits}</div><div class="l">${t("Críticos","Criticals")}</div></div>
+      <div class="sbox"><div class="n">${B.bestCombo}</div><div class="l">${t("Combo máx","Max combo")}</div></div>
       <div class="sbox"><div class="n ${passed?"good":"bad"}">${free?Math.round(xp/3):(xp||0)}</div><div class="l">XP</div></div>
-      <div class="sbox"><div class="n gold">${gold||0}</div><div class="l">Oro</div></div>
+      <div class="sbox"><div class="n gold">${gold||0}</div><div class="l">${t("Oro","Gold")}</div></div>
     </div>
 
-    ${loot.length?`<div class="loot">${loot.map(l=>`<div class="li">${ITEM_LIST.find(i=>i.id===l).ico} ${ITEM_LIST.find(i=>i.id===l).name}</div>`).join("")}</div>`:""}
+    ${loot.length?`<div class="loot">${loot.map(l=>{const li=ITEM_LIST.find(i=>i.id===l);return `<div class="li">${li.ico} ${iname(li)}</div>`}).join("")}</div>`:""}
     ${unlockedList.length?`<div class="unlocks">
-      <div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:var(--soft);text-transform:uppercase">Nodos desbloqueados</div>
+      <div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:var(--soft);text-transform:uppercase">${t("Nodos desbloqueados","Unlocked nodes")}</div>
       ${unlockedList.map(o=>`<div class="unlock"><span class="u">${o.s}</span>${esc(o.name)} · Nv${o.tier} · ${realmOf(o.r).name}</div>`).join("")}
     </div>`:""}
 
     <div class="res-actions">
       ${free
-        ? `<button class="btn btn-primary" onclick="startTraining()">🔁 Otro combate</button>
-           <button class="btn" onclick="openTraining()">🎯 Cambiar modo</button>`
+        ? `<button class="btn btn-primary" onclick="startTraining()">🔁 ${t("Otro combate","Another battle")}</button>
+           <button class="btn" onclick="openTraining()">🎯 ${t("Cambiar modo","Change mode")}</button>`
         : passed
-          ? `<button class="btn btn-primary" onclick="openBrief('${n.id}')">🔁 Repetir</button>
-             <button class="btn" onclick="openMap()">🗺️ Mapa</button>`
-          : `<button class="btn btn-primary" onclick="startBattle('${n.id}')">⚔️ Reintentar</button>
-             <button class="btn" onclick="openMap()">🗺️ Mapa</button>
-             ${P.lives<3?`<button class="btn" onclick="restLives()">🪙 Reponer vidas (60)</button>`:""}`}
-      <button class="btn btn-ghost" onclick="screenTitle()">🏠 Inicio</button>
+          ? `<button class="btn btn-primary" onclick="openBrief('${n.id}')">🔁 ${t("Repetir","Repeat")}</button>
+             <button class="btn" onclick="openMap()">🗺️ ${t("Mapa","Map")}</button>`
+          : `<button class="btn btn-primary" onclick="startBattle('${n.id}')">⚔️ ${t("Reintentar","Retry")}</button>
+             <button class="btn" onclick="openMap()">🗺️ ${t("Mapa","Map")}</button>
+             ${P.lives<3?`<button class="btn" onclick="restLives()">🪙 ${t("Reponer vidas","Restore lives")} (60)</button>`:""}`}
+      <button class="btn btn-ghost" onclick="screenTitle()">🏠 ${t("Inicio","Home")}</button>
     </div>
-    ${free?`<div class="best" style="margin-top:16px">El entrenamiento no consume vidas ni desbloquea nodos. Te llevas un tercio de la XP.</div>`:""}
+    ${free?`<div class="best" style="margin-top:16px">${t("El entrenamiento no consume vidas ni desbloquea nodos. Te llevas un tercio de la XP.","Training does not consume lives or unlock nodes. You earn one third of the XP.")}</div>`:""}
   </div>` + invHTML();
   refreshInventory();
-  if(passed && unlockedList.length) toast("🗺️ "+unlockedList.length+" nodo(s) desbloqueado(s)");
+  if(passed && unlockedList.length) toast("🗺️ "+unlockedList.length+" "+(unlockedList.length===1?t("nodo desbloqueado","node unlocked"):t("nodos desbloqueados","nodes unlocked")));
 }
 function verdictTitle(p, passed, n){
-  if(passed && p===100) return "👑 ¡PERFECCIÓN ABSOLUTA!";
-  if(passed) return "🏆 ¡NODO SUPERADO!";
-  if(p>=50) return "💪 Casi lo tienes";
-  if(p>=25) return "😤 Duro de roer";
-  return "💀 Derrota aplastante";
+  if(passed && p===100) return t("👑 ¡PERFECCIÓN ABSOLUTA!","👑 ABSOLUTE PERFECTION!");
+  if(passed) return t("🏆 ¡NODO SUPERADO!","🏆 NODE CLEARED!");
+  if(p>=50) return t("💪 Casi lo tienes","💪 So close");
+  if(p>=25) return t("😤 Duro de roer","😤 Tough to crack");
+  return t("💀 Derrota aplastante","💀 Crushing defeat");
 }
 function pickItem(){
   const it = ITEM_LIST[Math.floor(Math.random()*ITEM_LIST.length)];
@@ -1294,35 +1598,35 @@ function quitBattle(){
 
 /* ---------- ENTRENAMIENTO LIBRE ---------- */
 const TRAIN_MODES = {
-  classic:{n:"Combate clásico",ico:"⚔️",badge:"2 vidas · 20 s",p:"2 vidas y 20 segundos por golpe, sin límite de nodos. Gana un tercio de la XP."},
-  blitz:{n:"Asalto rápido",ico:"⚡",badge:"2 vidas · 15 s",p:"Solo 15 segundos por pregunta y 2 vidas. Máxima presión."},
-  drill:{n:"Simulacro",ico:"🎯",badge:"sin daño · 30 s",p:"Sin pérdida de vidas y 30 segundos por golpe. Ideal para memorizar antes de un boss."}
+  classic:{n:()=>t("Combate clásico","Classic battle"),ico:"⚔️",badge:()=>t("2 vidas · 20 s","2 lives · 20 s"),p:()=>t("2 vidas y 20 segundos por golpe, sin límite de nodos. Gana un tercio de la XP.","2 lives and 20 seconds per hit, no node limit. Earn one third of the XP.")},
+  blitz:{n:()=>t("Asalto rápido","Blitz"),ico:"⚡",badge:()=>t("2 vidas · 15 s","2 lives · 15 s"),p:()=>t("Solo 15 segundos por pregunta y 2 vidas. Máxima presión.","Only 15 seconds per question and 2 lives. Maximum pressure.")},
+  drill:{n:()=>t("Simulacro","Drill"),ico:"🎯",badge:()=>t("sin daño · 30 s","no damage · 30 s"),p:()=>t("Sin pérdida de vidas y 30 segundos por golpe. Ideal para memorizar antes de un boss.","No lost lives and 30 seconds per hit. Ideal for memorizing before a boss.")}
 };
 let T = {mode:"classic", realm:"__all", lives:2, perQ:20, noDamage:false};
 
 function openTraining(){
   app.innerHTML = hudHTML() + `<div class="card screen">
-    <div class="map-head"><h2>🎯 Entrenamiento libre</h2></div>
+    <div class="map-head"><h2>🎯 ${t("Entrenamiento libre","Free training")}</h2></div>
     <div class="modes">
       ${Object.entries(TRAIN_MODES).map(([k,m])=>`
         <button class="mode" onclick="T.mode='${k}';openTraining()">
-          <span class="badge">${m.badge}</span>
+          <span class="badge">${typeof m.badge==="function"?m.badge():m.badge}</span>
           <div class="ico">${m.ico}</div>
-          <h3 style="color:${T.mode===k?"var(--orange)":"#fff"}">${m.n}</h3>
-          <p>${m.p}</p>
+          <h3 style="color:${T.mode===k?"var(--orange)":"#fff"}">${typeof m.n==="function"?m.n():m.n}</h3>
+          <p>${typeof m.p==="function"?m.p():m.p}</p>
         </button>`).join("")}
     </div>
     <div style="margin-top:22px">
-      <div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:var(--soft);text-transform:uppercase;margin-bottom:10px">Reino</div>
+      <div style="font-size:12px;font-weight:800;letter-spacing:1.4px;color:var(--soft);text-transform:uppercase;margin-bottom:10px">${t("Reino","Realm")}</div>
       <div class="topics" style="justify-content:flex-start">
-        <button class="tchip ${T.realm==="__all"?"on":""}" onclick="T.realm='__all';openTraining()">Todos</button>
+        <button class="tchip ${T.realm==="__all"?"on":""}" onclick="T.realm='__all';openTraining()">${t("Todos","All")}</button>
         ${REALMS.map(r=>`<button class="tchip ${T.realm===r.id?"on":""}" onclick="T.realm='${r.id}';openTraining()">${r.sprite} ${esc(r.name)}</button>`).join("")}
       </div>
     </div>
     <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="startTraining()">⚔️ Comenzar combate</button>
-      <button class="btn btn-ghost" onclick="openMap()">← Mapa</button>
-      <button class="btn btn-ghost" onclick="screenTitle()">🏠 Inicio</button>
+      <button class="btn btn-primary" onclick="startTraining()">⚔️ ${t("Comenzar combate","Start battle")}</button>
+      <button class="btn btn-ghost" onclick="openMap()">← ${t("Mapa","Map")}</button>
+      <button class="btn btn-ghost" onclick="screenTitle()">🏠 ${t("Inicio","Home")}</button>
     </div>
   </div>` + invHTML();
   refreshInventory();
@@ -1332,15 +1636,15 @@ function startTraining(){
   const pool = rid==="__all"
     ? NODES.flatMap(n=>allQuestionsFor(n))
     : nodesOfRealm(rid).flatMap(n=>allQuestionsFor(n));
-  if(!pool.length){ toast("No hay preguntas en ese reino"); return; }
+  if(!pool.length){ toast(t("No hay preguntas en ese reino","No questions in that realm")); return; }
 
   const mode = TRAIN_MODES[T.mode];
   const picks = shuffle(pool).slice(0, Math.min(15, pool.length));
   /* nodo sintético con las preguntas ya elegidas, para que startBattle lo trate igual */
   const fake = {
     id:"__train", r: rid==="__all" ? "fnd" : rid, s:"🎯", t:"enemy",
-    name:"Simulacro · "+mode.n,
-    lore:"Entrenamiento libre: sin progresión, sin perder progreso.",
+    name:t("Simulacro","Drill")+" · "+(typeof mode.n==="function"?mode.n():mode.n),
+    lore:t("Entrenamiento libre: sin progresión, sin perder progreso.","Free training: no progression, no lost progress."),
     q: picks, xp:Math.round(picks.length*14), tier:2, req:[]
   };
   NODE.__train = fake;
@@ -1356,33 +1660,33 @@ function startTraining(){
 /* ---------- TIENDA ---------- */
 function openShop(){
   app.innerHTML = hudHTML() + `<div class="card screen">
-    <div class="mhead"><div class="mi">🛒</div><div><h3>Tienda de objetos</h3>
-      <div style="font-size:13px;color:var(--muted)">Salen de los combates. Tu oro actual: <b style="color:var(--gold)">🪙 ${P.gold}</b></div></div></div>
+    <div class="mhead"><div class="mi">🛒</div><div><h3>${t("Tienda de objetos","Item shop")}</h3>
+      <div style="font-size:13px;color:var(--muted)">${t("Salen de los combates. Tu oro actual:","Dropped from battles. Your current gold:")} <b style="color:var(--gold)">🪙 ${P.gold}</b></div></div></div>
     <div class="shopgrid">
       ${ITEM_LIST.map(it=>`
         <div class="item">
           <div class="ic">${it.ico}</div>
-          <b>${esc(it.name)}</b>
-          <p>${esc(it.desc)}</p>
+          <b>${esc(typeof it.name==="function"?it.name():it.name)}</b>
+          <p>${esc(typeof it.desc==="function"?it.desc():it.desc)}</p>
           <div class="pr">
             <span class="price">🪙 ${it.price}</span>
-            <span style="font-size:12px;color:var(--muted);font-weight:700">Tienes ${P.inv[it.id]||0}</span>
+            <span style="font-size:12px;color:var(--muted);font-weight:700">${t("Tienes","You have")} ${P.inv[it.id]||0}</span>
           </div>
           <button class="btn btn-sm btn-primary" onclick="buy('${it.id}')"
-            ${P.gold<it.price?"disabled":""}>Comprar</button>
+            ${P.gold<it.price?"disabled":""}>${t("Comprar","Buy")}</button>
         </div>`).join("")}
       <div class="item">
         <div class="ic">❤️</div>
-        <b>Reponer vidas</b>
-        <p>Recupera tus vidas al máximo de 3 para volver al mapa.</p>
+        <b>${t("Reponer vidas","Restore lives")}</b>
+        <p>${t("Recupera tus vidas al máximo de 3 para volver al mapa.","Restore your lives to the max of 3 to return to the map.")}</p>
         <div class="pr"><span class="price">🪙 60</span>
-          <span style="font-size:12px;color:var(--muted);font-weight:700">Tienes ${P.lives}</span></div>
-        <button class="btn btn-sm btn-primary" onclick="restLives()" ${P.lives>=3?"disabled":""}>Comprar</button>
+          <span style="font-size:12px;color:var(--muted);font-weight:700">${t("Tienes","You have")} ${P.lives}</span></div>
+        <button class="btn btn-sm btn-primary" onclick="restLives()" ${P.lives>=3?"disabled":""}>${t("Comprar","Buy")}</button>
       </div>
     </div>
     <div style="display:flex;gap:12px;justify-content:center;margin-top:22px">
-      <button class="btn btn-primary" onclick="openShop()">🔄 Actualizar</button>
-      <button class="btn btn-ghost" onclick="openMap()">← Mapa</button>
+      <button class="btn btn-primary" onclick="openShop()">🔄 ${t("Actualizar","Refresh")}</button>
+      <button class="btn btn-ghost" onclick="openMap()">← ${t("Mapa","Map")}</button>
       <button class="btn btn-ghost" onclick="screenTitle()">🏠 Inicio</button>
     </div>
   </div>` + invHTML();
@@ -1390,20 +1694,20 @@ function openShop(){
 }
 function buy(id){
   const it = ITEM_LIST.find(i=>i.id===id);
-  if(P.gold < it.price){ toast("Oro insuficiente"); return; }
+  if(P.gold < it.price){ toast(t("Oro insuficiente","Not enough gold")); return; }
   P.gold -= it.price;
   P.inv[id] = (P.inv[id]||0)+1;
   sfx.coin(); save(); openShop(); refreshInventory();
 }
 function restLives(){
-  if(P.lives>=3){ toast("Ya tienes 3 vidas"); return; }
+  if(P.lives>=3){ toast(t("Ya tienes 3 vidas","You already have 3 lives")); return; }
   if(P.gold<60){
-    if(P.lives < 1){ P.lives = 1; save(); toast("❤️ Al menos 1 vida"); refreshInventory(); openMap(); }
-    else toast("Necesitas 60 de oro (tienes "+P.gold+")");
+    if(P.lives < 1){ P.lives = 1; save(); toast(t("❤️ Al menos 1 vida","❤️ At least 1 life")); refreshInventory(); openMap(); }
+    else toast(t("Necesitas 60 de oro (tienes ","You need 60 gold (you have ")+P.gold+")");
     return;
   }
   P.gold -= 60; P.lives = 3;
-  sfx.coin(); save(); toast("❤️ Vidas repuestas");
+  sfx.coin(); save(); toast(t("❤️ Vidas repuestas","❤️ Lives restored"));
   openMap();
   refreshInventory();
 }
@@ -1411,8 +1715,8 @@ function restLives(){
 /* ---------- BESTIARIO ---------- */
 function openBestiary(){
   app.innerHTML = hudHTML() + `<div class="card screen">
-    <div class="mhead"><div class="mi">📖</div><div><h3>Bestiario de AWS</h3>
-      <div style="font-size:13px;color:var(--muted)">${P.stats.kills} enemigos derrotados · ${P.stats.bosses} bosses</div></div></div>
+    <div class="mhead"><div class="mi">📖</div><div><h3>${t("Bestiario de AWS","AWS Bestiary")}</h3>
+      <div style="font-size:13px;color:var(--muted)">${P.stats.kills} ${t("enemigos derrotados","enemies defeated")} · ${P.stats.bosses} ${t("bosses","bosses")}</div></div></div>
     <div class="bestiary">
       ${NODES.map(n=>{
         const done = isCleared(n.id);
@@ -1423,13 +1727,13 @@ function openBestiary(){
             <b>${done?esc(n.name):"???"} ${n.t==="boss"?"👹":n.t==="elite"?"💀":""}</b>
             <span>${r.sprite} ${esc(r.name)} · Nv${n.tier} · ${nodeTypeLabel(n)}${done?" · "+pct(n.id)+"%":""}</span>
           </div>
-          ${done?`<div class="bscore">${pct(n.id)}%</div>`:`<button class="btn btn-sm" onclick="openBrief('${n.id}')">Ver</button>`}
+          ${done?`<div class="bscore">${pct(n.id)}%</div>`:`<button class="btn btn-sm" onclick="openBrief('${n.id}')">${t("Ver","View")}</button>`}
         </div>`;
       }).join("")}
     </div>
     <div style="display:flex;gap:12px;justify-content:center;margin-top:22px">
-      <button class="btn btn-primary" onclick="openBestiary()">🔄 Actualizar</button>
-      <button class="btn btn-ghost" onclick="screenTitle()">🏠 Inicio</button>
+      <button class="btn btn-primary" onclick="openBestiary()">🔄 ${t("Actualizar","Refresh")}</button>
+      <button class="btn btn-ghost" onclick="screenTitle()">🏠 ${t("Inicio","Home")}</button>
     </div>
   </div>` + invHTML();
   refreshInventory();
@@ -1452,12 +1756,12 @@ function openCodex(){
     </div>`;
   }).join("");
   app.innerHTML = hudHTML() + `<div class="card screen">
-    <div class="mhead"><div class="mi">🧾</div><div><h3>Registro de trucos</h3>
-      <div style="font-size:13px;color:var(--muted)">Progreso global: <b style="color:var(--orange)">${totalPct()}%</b> · ${rank().cur.ico} ${rank().cur.name}</div></div></div>
+    <div class="mhead"><div class="mi">🧾</div><div><h3>${t("Registro de trucos","Cheat sheet")}</h3>
+      <div style="font-size:13px;color:var(--muted)">${t("Progreso global:","Overall progress:")} <b style="color:var(--orange)">${totalPct()}%</b> · ${rank().cur.ico} ${rank().cur.name}</div></div></div>
     <div class="unlocks">${realms}</div>
     <div style="display:flex;gap:12px;justify-content:center;margin-top:22px">
-      <button class="btn btn-primary" onclick="openMap()">🗺️ Mapa</button>
-      <button class="btn btn-ghost" onclick="screenTitle()">🏠 Inicio</button>
+      <button class="btn btn-primary" onclick="openMap()">🗺️ ${t("Mapa","Map")}</button>
+      <button class="btn btn-ghost" onclick="screenTitle()">🏠 ${t("Inicio","Home")}</button>
     </div>
   </div>` + invHTML();
   refreshInventory();

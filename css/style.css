@@ -985,6 +985,39 @@ body::before {
 .opt.dim {
   opacity: 0.38;
 }
+.opt.picked {
+  border-color: var(--purple, #a36bff);
+  background: rgba(163, 107, 255, 0.16);
+  box-shadow: 0 0 0 1px rgba(163, 107, 255, 0.35);
+}
+.opt.picked .letter {
+  background: var(--purple, #a36bff);
+  color: #fff;
+  border-color: var(--purple, #a36bff);
+}
+.multi-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #06101f;
+  background: var(--purple, #a36bff);
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-right: 8px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+.langbtn {
+  min-width: 46px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+.langbtn:hover:not(:disabled) {
+  border-color: var(--orange, #ff9900) !important;
+  color: var(--orange-soft, #ffd9a8) !important;
+}
 @keyframes pop {
   50% {
     transform: scale(1.03);
@@ -1598,6 +1631,50 @@ body::before {
   outline: none;
   border-color: rgba(255, 153, 0, 0.55);
 }
+
+/* ---- MEMORIA (parejas) ---- */
+.memgrid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:14px
+}
+.memcard{
+  position:relative;min-height:78px;border:1.5px solid var(--edge);border-radius:12px;cursor:pointer;
+  background:#12223a;color:var(--orange);font-family:inherit;font-size:14px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;
+  transition:transform .12s,background .12s;overflow:hidden
+}
+.memcard:hover:not(:disabled){transform:translateY(-2px);border-color:var(--orange)}
+.memcard .memface{position:absolute;inset:0;display:grid;place-items:center;transition:opacity .12s}
+.memcard .memback{font-size:28px;color:var(--orange)}
+.memcard .memfront{opacity:0;padding:10px;font-size:13px}
+.memcard.flip .memback{opacity:0}
+.memcard.flip .memfront{opacity:1}
+.memcard.ok{background:var(--green);color:#0b1729;border-color:var(--green);cursor:default}
+.memcard.ok .memfront{opacity:1}
+.memcard.ok .memback{opacity:0}
+.memcard.err{background:#ff5a5a;color:#fff;border-color:#ff5a5a}
+.memstats{display:flex;gap:20px;margin-bottom:10px;font-size:14px;font-weight:800;color:var(--muted)}
+.memstats b{color:var(--orange-soft)}
+
+/* ---- AHORCADO ---- */
+.hangclue{
+  display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:11px 14px;border-radius:12px;
+  background:rgba(83,168,251,.1);border:1px solid rgba(83,168,251,.35);color:var(--text);font-size:15px;font-weight:600;line-height:1.4
+}
+.hangclue b{color:var(--blue)}
+.hangword{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0 10px}
+.hangcell{
+  width:44px;height:56px;border-bottom:3px solid var(--edge);display:grid;place-items:center;
+  font-size:34px;font-weight:800;color:var(--text);font-family:'DejaVu Sans Mono',monospace
+}
+.hangcell.hangspace{border-bottom:0}
+.hanglives{text-align:center;font-size:22px;letter-spacing:4px;margin-bottom:8px}
+.hanggrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:4px}
+.hangletter{
+  border:1.5px solid var(--edge);border-radius:9px;padding:9px 0;background:rgba(255,255,255,.05);
+  color:var(--text);font-weight:800;font-size:15px;cursor:pointer;transition:all .12s
+}
+.hangletter:hover:not(:disabled){border-color:var(--orange);background:rgba(255,153,0,.14)}
+.hangletter:disabled{cursor:default;opacity:.45}
 
 /* ---- RESULT ---- */
 .result {

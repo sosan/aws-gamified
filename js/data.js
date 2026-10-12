@@ -78,7 +78,42 @@ const BANK = [
 /* Destinations */
 {t:"Destinations",q:"¿Qué enrutan las Destinations de Lambda?",o:["El resultado de invocaciones asíncronas: éxito o fallo","Las peticiones HTTP entrantes","Los logs de CloudWatch","El tráfico del API Gateway"],a:0,e:"Configuras onSuccess y onFailure para enviar la respuesta o el error a otro servicio sin código extra."},
 {t:"Destinations",q:"¿A qué servicios puede enviar una Destination?",o:["SQS, SNS, EventBridge u otra función Lambda","Solo a S3","Solo a DynamoDB","A cualquier endpoint HTTP público"],a:0,e:"Cuatro destinos: SQS, SNS, EventBridge y Lambda. Sustituyen al patrón try/catch → SNS dentro del código."},
-{t:"Destinations",q:"¿Las Destinations funcionan con invocaciones síncronas?",o:["No, solo asíncronas y event-source mappings","Sí, siempre","Solo con API Gateway","Solo con CloudFront"],a:0,e:"Solo aplican a invocaciones async y poll-based. En modo síncrono gestionas el resultado en tu código."}
+{t:"Destinations",q:"¿Las Destinations funcionan con invocaciones síncronas?",o:["No, solo asíncronas y event-source mappings","Sí, siempre","Solo con API Gateway","Solo con CloudFront"],a:0,e:"Solo aplican a invocaciones async y poll-based. En modo síncrono gestionas el resultado en tu código."},
+
+/* ============== PRACTITIONER (SAA / SAP) ============== */
+{t:"SAA",q:"Para desplegar una app con alta disponibilidad en múltiples AZs, ¿qué patrón eliges?",o:["Una sola instancia EC2 grande en una AZ","Auto Scaling Group detrás de un ELB en ≥2 AZs","Una instancia Reserved en una AZ","Instancias bajo demanda en una sola AZ"],a:1,e:"ASG + ELB en ≥2 AZs da failover automático y HA real. Una sola AZ = punto único de fallo."},
+{t:"SAA",q:"¿Cómo restringir el acceso a un bucket S3 SOLO desde tu VPC?",o:["Hacer el bucket público","Bucket Policy con aws:SourceVpce + VPC endpoint","Solo IAM users sin conditions","Crear CloudFront y hacerlo público"],a:1,e:"Un VPC endpoint (gateway para S3/DynamoDB) + bucket policy con aws:SourceVpce permite acceso privado sin internet."},
+{t:"SAA",q:"¿Qué clase de S3 usarías para datos a los que se accede <1 vez al mes y que deben estar disponibles en milisegundos?",o:["S3 Standard","Glacier Deep Archive","S3 Standard-IA","S3 Glacier Instant Retrieval"],a:3,e:"Glacier Instant Retrieval da milisegundos con coste de GB muy bajo para acceso raro. Glacier Deep Archive son horas."},
+{t:"SAA",q:"¿Qué servicio usarías para distribuir contenido estático global con baja latencia?",o:["AWS Global Accelerator","Amazon CloudFront","AWS Direct Connect","Amazon API Gateway"],a:1,e:"CloudFront es la CDN de AWS: cachea en edge locations y reduce latencia global."},
+{t:"SAA",q:"Para una base de datos relacional gestionada con failover automático, ¿qué eliges?",o:["RDS Multi-AZ","RDS Single-AZ","DynamoDB global tables","EC2 con SQL Server"],a:0,e:"RDS Multi-AZ replica síncronamente en otra AZ con failover automático. Single-AZ no tiene failover."},
+{t:"SAA",q:"¿Cómo minimizar el coste de EC2 para cargas interrumpibles (batch) en producción?",o:["On-Demand siempre","Savings Plans 1 año","Spot Instances","Reserved Instances 3 años"],a:2,e:"Spot Instances aprovechan capacidad no usada con hasta 90% de descuento; ideales para batch tolerante a interrupciones."},
+{t:"SAA",q:"¿Qué servicio da control de tráfico HTTP a nivel de path/host con reglas?",o:["AWS WAF","Application Load Balancer (ALB)","Network Load Balancer (NLB)","Amazon CloudFront"],a:1,e:"ALB enruta capa 7 por host, path, headers, query string. NLB es capa 4. WAF filtra; no enruta."},
+{t:"SAA",q:"¿Qué servicio AWS NAT-traffic de salida desde subredes privadas sin exponerlas a Internet entrante?",o:["Internet Gateway","NAT Gateway","VPC Endpoint","VPC Peering"],a:1,e:"NAT Gateway da salida (egreso) a Internet desde subredes privadas, sin permitir conexiones entrantes no solicitadas."},
+{t:"SAA",q:"Para monitorizar métricas custom de tu app cada 30s y alertar cuando superen umbral, ¿qué usas?",o:["CloudWatch Logs Insights","CloudWatch Metrics + Alarmas","CloudTrail","Config"],a:1,e:"CloudWatch Metrics almacena series temporales; las Alarmas disparan acciones (SNS, Auto Scaling) al cruzar umbrales."},
+{t:"SAA",q:"¿Qué opción reduce el coste de transferencia de datos ENTRE regiones AWS?",o:["Usar Glacier Transfer Acceleration","Usar VPC Peering","Usar endpoints de CloudFront","Nada: el egreso entre regiones siempre se cobra"],a:3,e:"El egreso entre regiones se factura siempre. Savings: NAT Gateway a Internet, endpoints S3/DDB dentro de la región."},
+{t:"SAA",q:"¿Qué servicio AWS sirve para distribuir tráfico global con health checks y failover automático?",o:["Elastic Load Balancer","Amazon CloudFront","AWS Global Accelerator","Route 53"],a:3,e:"Route 53 es DNS con routing policies (failover, weighted, latency). Global Accelerator es TCP/UDP en edge."},
+{t:"SAA",q:"Para descifrar datos en S3 con control fino por usuario, ¿qué servicio AWS de KMS usas?",o:["AWS KMS con CMK por usuario","Default S3 SSE-S3 (sin control)","CloudHSM solo para KMS","Solo SSE-C con clave del cliente"],a:0,e:"CMK (Customer Master Key) por usuario/equipo te da control por IAM: cada clave tiene su propia policy de acceso."},
+{t:"SAA",q:"¿Cómo autenticas usuarios finales en una app web con login social (Google/Facebook) y email/password?",o:["AWS Directory Service","AWS IAM","Cognito User Pools","IAM Roles"],a:2,e:"Cognito User Pools emite tokens JWT, soporta login social (Google, Facebook, SAML) y email/password."},
+{t:"SAA",q:"¿Qué usarías para limitar DDoS de capa 7 contra una API web en CloudFront?",o:["Shield Standard","AWS WAF en CloudFront","NAT Gateway","Security Groups"],a:1,e:"WAF filtra requests de capa 7 (SQLi, XSS, rate limiting). Shield Standard da DDoS básico gratuito."},
+{t:"SAA",q:"Para una app multi-tier que escala con CPU, ¿qué combo da auto scaling reactivo?",o:["EC2 + CloudWatch alarm + Auto Scaling Group","EC2 + RDS read replica","CloudFront + S3","Route 53 + CloudWatch"],a:0,e:"CloudWatch alarm (CPU > 70%) → acción Auto Scaling → lanza/termina instancias. Es el patrón canónico reactivo."},
+{t:"SAA",q:"¿Qué servicio para recibir logs centralizados de múltiples instancias EC2 en una sola vista consultable?",o:["CloudWatch Logs","CloudTrail","S3 directo","Kinesis Data Streams"],a:0,e:"CloudWatch Logs centraliza logs de EC2 (vía agente), Lambda, ECS. Logs Insights permite consultas SQL-like."},
+{t:"SAA",q:"¿Cómo conectas tu data center on-prem con una VPC de AWS de forma privada y consistente?",o:["Internet + IPsec VPN","AWS Direct Connect","WireGuard sobre NAT Gateway","Internet Gateway público"],a:1,e:"Direct Connect es una conexión privada dedicada (1-10 Gbps) con latencia consistente. VPN sobre Internet es alternativa más barata."},
+{t:"SAA",q:"Para auditoría de quién hizo qué en tu cuenta AWS, ¿qué servicio usas?",o:["CloudWatch Logs","CloudTrail","AWS Config","Trusted Advisor"],a:1,e:"CloudTrail registra cada llamada a la API con user, recurso, timestamp. Es el log de auditoría (compliance)."},
+{t:"SAA",q:"¿Cómo reduces el tiempo de respuesta global de una API multi-región?",o:["Route 53 latency-based + CloudFront en cada región","Una sola región grande","AWS Direct Connect","EC2 más grandes"],a:0,e:"Route 53 con latency policy enruta al endpoint más cercano; CloudFront cachea en edge. Distribución geográfica."},
+{t:"SAA",q:"¿Qué patrón usarías para procesar pedidos de forma asíncrona y desacoplada?",o:["Lambda síncrona + DynamoDB","API Gateway → SQS → Lambda → SNS","EC2 + cron","Solo RDS con triggers"],a:1,e:"API GW responde 202, SQS desacopla y absorbe picos, Lambda procesa asíncrono, SNS notifica. Patrón canónico serverless."},
+{t:"SAA",q:"¿Qué servicio usarías para una cola FIFO con orden estricto y exactamente una entrega?",o:["Amazon SQS Standard","Amazon SQS FIFO","Amazon Kinesis Data Streams","Amazon SNS"],a:1,e:"SQS FIFO garantiza orden por MessageGroupId y deduplicación por MessageId. Standard escala más pero puede duplicar."},
+{t:"SAA",q:"Para Glacier Deep Archive, ¿cuál es el tiempo típico de restore?",o:["1-5 minutos","1-12 horas","Hasta 24 horas","Inmediato"],a:1,e:"Glacier Deep Archive: 12 horas estándar, hasta 48h con bulk. S3 Glacier Flexible: 1-5 min (estándar) o 5-12h (bulk)."},
+{t:"SAA",q:"¿Qué servicio AWS para una base de datos clave-valor con latencia de milisegundos a escala global?",o:["RDS Multi-AZ","Amazon Aurora","DynamoDB Global Tables","Redshift"],a:2,e:"DynamoDB Global Tables replica multi-región activa-activa con latencia de un dígito en milisegundos."},
+
+/* --- SAP (Pro) --- */
+{t:"SAP",q:"Una app SaaS multi-tenant necesita aislamiento estricto por tenant y consultas SQL complejas. ¿Qué elegirías?",o:["Una sola tabla DynamoDB con partition por tenant","Amazon RDS con esquema por tenant o bases separadas","Athena sobre S3","Solo ElastiCache"],a:1,e:"RDS con DB por tenant (o schema por tenant con Row-Level Security) da aislamiento + SQL complejo. DynamoDB single-table requiere modelado NoSQL."},
+{t:"SAP",q:"Para auditar cambios de configuración en TODOS los recursos de tu organización multi-cuenta, ¿qué?",o:["CloudTrail Lake con organizations trail","AWS Trusted Advisor","CloudWatch Logs","Inspector"],a:0,e:"CloudTrail Lake con un organization trail ingiere eventos de todas las cuentas y permite consultas SQL sobre cambios."},
+{t:"SAP",q:"¿Qué servicio AWS usarías para distribuir tráfico Blue/Green entre dos versiones de una API conmutando al instante?",o:["Elastic Load Balancer con dos target groups + DNS weighted","Route 53 con failover policy","API Gateway con stage prod y stage canary","Solo cambiar el AMI de las EC2"],a:0,e:"ALB enruta a dos target groups (v1, v2) y con Route 53 weighted / API Gateway stage cambias el tráfico sin downtime."},
+{t:"SAP",q:"¿Cómo minimizas el coste de una flota EC2 impredecible (picos esporádicos) con SLA estricto?",o:["On-Demand siempre","Savings Plans 1 año","Combo de Savings Plans + Spot para lo variable","Reserved Instances 3 años"],a:2,e:"Savings Plans cubren la base predecible (descuento ~30%) y Spot Instances cubren los picos variables con 70% de descuento."},
+{t:"SAP",q:"Para una migración de DB Oracle de 50 TB on-prem a Aurora PostgreSQL con downtime mínimo, ¿qué?",o:["Dump & restore manual","AWS DMS con CDC continuo","Direct Connect + rsync","Solo AWS Schema Conversion Tool"],a:1,e:"AWS Database Migration Service (DMS) con CDC (Change Data Capture) replica cambios en continuo; downtime casi cero."},
+{t:"SAP",q:"Para centralizar logs de VPC Flow, CloudTrail, ALB y Lambda en una sola herramienta consultable, ¿qué?",o:["CloudWatch Logs Insights","Athena sobre S3 + Glue","OpenSearch Service con log streams","AWS X-Ray"],a:2,e:"OpenSearch Service (sucesor de Elasticsearch) indexa logs de cualquier fuente y da Kibana para consultas visuales."},
+{t:"SAP",q:"¿Cómo aíslas estrictamente la red entre 3 aplicaciones que comparten la misma VPC de AWS?",o:["Una subnet única para todas","Tres VPCs peered","Subnet groups separados + NACLs restrictivas + Security Groups","Una sola subnet compartida"],a:2,e:"Subnets separados por app + NACLs restrictivas (stateless) + SGs (stateful) = defensa en profundidad dentro de la VPC."},
+{t:"SAP",q:"Para que una app on-prem se autentique contra AWS APIs sin guardar credenciales, ¿qué usas?",o:["Access keys IAM en archivo","Instance Profiles de IAM Role + STS","API Gateway con API key","Usuario IAM con password"],a:1,e:"IAM Roles con Instance Profiles dan credenciales temporales rotadas automáticamente vía STS a la EC2 on-prem (con AWS IAM Roles Anywhere)."}
 ];
 
 /* ---------- REINOS ---------- */
@@ -96,7 +131,9 @@ const REALMS = [
   {id:"evt", name:"Mensajería y Eventos", sprite:"📨", color:"#F06292",
    desc:"SQS, SNS, EventBridge y orquestación de workflows."},
   {id:"obs", name:"Observabilidad y DevOps", sprite:"📊", color:"#53A8FB",
-   desc:"Métricas, trazas, CI/CD y auditoría."}
+   desc:"Métricas, trazas, CI/CD y auditoría."},
+  {id:"cert", name:"Certificación AWS", sprite:"🎓", color:"#FBBF24",
+   desc:"Exámenes reales de AWS Skill Builder: Security, ML, Data, Architect y más."}
 ];
 
 /* ---------- NODOS ---------- */
@@ -717,6 +754,74 @@ function buildWordGrid(words, opts){
    descartando un color por pareja acertada. Esta constante nunca se muta. */
 const MATCH_COLORS = ["#FF9900", "#2EC5BE", "#A36BFF", "#6BC853", "#F06292"];
 
+/* ---------- HANG_CLUES: pistas por palabra para el ahorcado ----------
+   Cada pista es una descripción corta del concepto AWS. Si la palabra
+   no aparece aquí, se usa el hint genérico del set como fallback. */
+const HANG_CLUES = {
+  /* compute / serverless */
+  S3:           "Almacenamiento de objetos regional en AWS",
+  EC2:          "Máquinas virtuales bajo tu control",
+  LAMBDA:       "Código serverless que se ejecuta por eventos",
+  VPC:          "Red virtual privada aislada en una región",
+  IAM:          "Identidades, usuarios, roles y permisos",
+  SQS:          "Cola de mensajes con entrega at-least-once",
+  SNS:          "Publicador con fan-out a muchos suscriptores",
+  FARGATE:      "Contenedores sin gestionar servidores ni nodos",
+  AUTOSCALING:  "Escalado automático de instancias según métricas",
+  BURSTING:     "Instancias T que acumulan créditos de CPU",
+  DEDICATEDHOST:"Host físico reservado solo para tu instancia",
+  CONTAINER:    "Unidad empaquetada con imagen y dependencias",
+  /* storage */
+  BUCKET:       "Contenedor de objetos en S3",
+  GLACIER:      "Archivo a largo plazo al menor coste",
+  DYNAMODB:     "Tabla NoSQL clave-valor serverless",
+  AURORA:       "MySQL/PostgreSQL gestionado de alto rendimiento",
+  ELASTICACHE:  "Caché en memoria con Redis o Memcached",
+  REDSHIFT:     "Data warehouse columnar para analítica",
+  /* network */
+  SUBNET:       "Segmento de red dentro de la VPC",
+  ROUTING:      "Tabla que define el camino del tráfico",
+  GATEWAY:      "Conexión entre VPC e Internet (IGW/NAT)",
+  LOADBALANCER: "Distribuye tráfico entre varios targets",
+  CLOUDFRONT:   "CDN global con caché en edge locations",
+  ROUTE53:      "DNS autoritativo con health checks",
+  APIGATEWAY:   "Puerta de entrada a APIs REST/HTTP/WebSocket",
+  ALB:          "Balanceador de capa 7 con rutas por host/path",
+  SUBNETS:      "Subredes privadas y públicas dentro de la VPC",
+  /* security */
+  KMS:          "Servicio de claves de cifrado gestionadas",
+  COGNITO:      "Identidad de usuario con MFA y federación",
+  WAF:          "Firewall de capa 7 (SQLi, XSS, bots)",
+  GUARDDUTY:    "Detección de amenazas con Machine Learning",
+  MACIE:        "Clasifica datos sensibles (PII) en S3",
+  MULTIFACTOR:  "Segundo factor de autenticación",
+  SECRETMANAGER:"Rotación y custodia de secretos",
+  /* observability */
+  CLOUDWATCH:   "Métricas, logs y alarmas de AWS",
+  XRAY:         "Trazas distribuidas de extremo a extremo",
+  CLOUDTRAIL:   "Auditoría de llamadas a la API",
+  ALARMS:       "Disparadores automáticos por umbrales",
+  CODEPIPELINE: "Orquestador visual de CI/CD",
+  CODEBUILD:    "Compilación y tests gestionados",
+  ALERT:        "Notificación cuando algo se desvía",
+  /* events */
+  EVENTBRIDGE:  "Bus de eventos con enrutado por patrón",
+  STEPFUNCTIONS:"Orquestación de workflows con estado",
+  KINESIS:      "Streaming de datos en tiempo real",
+  DEADLETTER:   "Cola para mensajes que fallaron N veces",
+  FIFO:         "Cola con orden estricto y deduplicación",
+  BACKLOG:      "Mensajes acumulados esperando ser procesados",
+  /* fundamentals */
+  REGION:       "Área geográfica con varias Availability Zones",
+  AVAILABILITYZONE:"Centro de datos aislado dentro de una región",
+  OUTPOSTS:     "AWS instalado en tu propio datacenter",
+  SAVINGSPLAN:  "Descuento por compromiso de cómputo 1-3 años",
+  WELLARCHITECTED:"Seis pilares de buenas prácticas en AWS",
+  PAYASYOUGO:   "Pagas solo por lo que consumes",
+  CERTIFICATE:  "Certificado SSL/TLS gestionado (ACM)",
+  SNAPSHOT:     "Captura puntual de un volumen EBS o AMI"
+};
+
 function buildCrossGrid(cross){
   /* Construye la rejilla 2D desde cross.words y verifica que cada palabra
      encaje y que las intersecciones coincidan. Lanza si la crossword es
@@ -862,19 +967,97 @@ const PUZZLE_HALLS = [
 ];
 NODES.push(...PUZZLE_HALLS);
 
+/* ======================================================================
+   REINO DE CERTIFICACIÓN AWS (banco AWS Skill Builder, 748 preguntas)
+   Nodos temáticos por categoría; cada uno usa marcadores "Categoría:N"
+   que toman preguntas del BANK fusionado (js/skillbuilder_bank.js).
+   La raíz cuelga de fnd-cloud para que se desbloqueen tras empezar.
+   ====================================================================== */
+const CERT_NODES = [
+  {id:"cert-sec", r:"cert", s:"🔐", t:"enemy", req:[], xp:160, tier:1,
+   name:"Guardián de Seguridad", lore:"Las preguntas reales de Security del Skill Builder: IAM, KMS, WAF y cifrado.",
+   q:["Security:4"]},
+  {id:"cert-data", r:"cert", s:"💾", t:"enemy", req:["cert-sec"], xp:170, tier:1,
+   name:"Analista de Datos", lore:"EMR, Redshift, Kinesis y pipelines de datos con las preguntas oficiales.",
+   q:["Data Analytics:4"]},
+  {id:"cert-net", r:"cert", s:"🌐", t:"enemy", req:["cert-data"], xp:180, tier:2,
+   name:"Arquitecto de Red", lore:"VPC, Route 53, CloudFront y balanceo: el temario de Networking real.",
+   q:["Networking:4"]},
+  {id:"cert-ml", r:"cert", s:"🤖", t:"enemy", req:["cert-data"], xp:190, tier:2,
+   name:"Oráculo de Machine Learning", lore:"SageMaker, modelos y datos con las preguntas de ML del Skill Builder.",
+   q:["Machine Learning:4"]},
+  {id:"cert-srv", r:"cert", s:"⚡", t:"enemy", req:["cert-net","cert-ml"], xp:200, tier:2,
+   name:"Maestro Serverless", lore:"Lambda, API Gateway y serverless con las preguntas de Serverless Developer.",
+   q:["Serverless Developer:4"]},
+  {id:"cert-cp", r:"cert", s:"🎯", t:"enemy", req:["cert-srv"], xp:210, tier:3,
+   name:"Practicante Cloud", lore:"Preguntas prácticas de los Industry Quests (Healthcare y Manufacturing): el temario Cloud Practitioner en la práctica.",
+   q:["AWS Industry Quest: Healthcare:2","AWS Industry Quest: Manufacturing and Automotive:2"]},
+  {id:"cert-saa", r:"cert", s:"🏛️", t:"elite", req:["cert-cp"], xp:300, tier:4,
+   name:"Solutions Architect Elite", lore:"Preguntas reales de Solutions Architect: diseño, escalado y alta disponibilidad.",
+   q:["Solutions Architect:6"]},
+  {id:"cert-genai", r:"cert", s:"🧠", t:"elite", req:["cert-saa"], xp:310, tier:4,
+   name:"Generative AI Architect", lore:"Las preguntas de Generative AI Architect y Practitioner combinadas.",
+   q:["Generative AI Architect:4","Generative AI Practitioner:3"]},
+  {id:"cert-final", r:"cert", s:"👑", t:"boss", req:["cert-genai"], xp:520, tier:5,
+   name:"Examen Final de Certificación", lore:"La prueba maestra: mezcla las categorías más duras del Skill Builder.",
+   q:["Security:2","Solutions Architect:2","Machine Learning:2","Data Analytics:2","Generative AI Architect:2"]}
+];
+NODES.push(...CERT_NODES);
+
 /* Añade sólo los tipos que todavía no tenga un nodo. Así los nodos que ya
    declaran retos explícitamente conservan su contenido sin duplicados. */
 function hasChallenge(n,type){ return (n.q||[]).some(e=>e && !Array.isArray(e) && e.type===type); }
 NODES.forEach(n=>{
   if(n.t==="enemy" && n.tier>=2 && !hasChallenge(n,"match")) n.q.push({type:"match",ref:"__any",n:1});
+  if(n.t==="enemy" && n.tier>=2 && !hasChallenge(n,"memory")) n.q.push({type:"memory",ref:"__any",n:4});
   if(n.t==="enemy" && n.tier>=3 && !hasChallenge(n,"wordsearch")) n.q.push({type:"wordsearch",ref:"__any",n:1});
+  if(n.t==="enemy" && n.tier>=3 && !hasChallenge(n,"hangman")) n.q.push({type:"hangman",ref:"__any",n:1});
   if(n.t==="elite"){
     if(!hasChallenge(n,"match")) n.q.push({type:"match",ref:"__any",n:1});
     if(!hasChallenge(n,"wordsearch")) n.q.push({type:"wordsearch",ref:"__any",n:1});
+    /* elites: 2 preguntas de práctica AWS para subir dificultad */
+    n.q.push({type:"quiz-bank", topic:"SAA", n:2});
   }
   if(n.t==="boss"){
     if(!hasChallenge(n,"wordsearch")) n.q.push({type:"wordsearch",ref:"__any",n:1});
     if(!hasChallenge(n,"crossword")) n.q.push({type:"crossword",ref:"__any",n:1});
+    /* bosses: 2 preguntas SAA + 1 SAP (la más difícil del juego) */
+    n.q.push({type:"quiz-bank", topic:"SAA", n:2});
+    n.q.push({type:"quiz-bank", topic:"SAP", n:1});
   }
 });
+
+/* El banco AWS Skill Builder (definido en js/skillbuilder_bank.js, que se carga
+   DESPUÉS de data.js) se fusiona en BANK al inicio de engine.js. */
+
+/* ======================================================================
+   IDIOMA (EN/ES)
+   P.lang (persistido) guarda el idioma activo: "es" (defecto) o "en".
+   L() devuelve el idioma activo; t(es,en) traduce una cadena de la UI.
+   El banco bilingüe (js/bank.js) expone BILINGUAL_BANK con es/en por pregunta.
+   ====================================================================== */
+function L(){ return P && P.lang === "en" ? "en" : "es"; }
+function t(es, en){ return L() === "en" ? en : es; }
+function setLang(l){
+  P.lang = (l === "en") ? "en" : "es";
+  save();
+  const hasDoc = typeof document !== "undefined" && document && typeof document.querySelector === "function";
+  /* Durante un combate no reiniciamos la pregunta ni el temporizador: el nuevo
+     idioma se aplica al siguiente golpe; actualizamos solo el botón del HUD. */
+  if (typeof B !== "undefined" && B && B.node) {
+    if (hasDoc) {
+      const btn = document.querySelector(".langbtn");
+      if (btn) btn.textContent = L()==="es" ? "EN" : "ES";
+    }
+    return;
+  }
+  /* repinta la pantalla actual para aplicar el idioma al instante */
+  if (!hasDoc) return;
+  const sc = document.getElementById("app").innerHTML.match(/card (title|screen)/);
+  if (sc) {
+    if (typeof openMap === "function" && document.querySelector(".mapcard")) openMap();
+    else if (typeof openTraining === "function" && document.querySelector(".tchip")) openTraining();
+    else if (typeof screenTitle === "function") screenTitle();
+  }
+}
 
