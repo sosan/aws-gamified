@@ -3773,9 +3773,9 @@ const BILINGUAL_BANK = [
   "es": {
    "q": "¿Qué escenarios son casos de uso ideales para AWS PrivateLink? (Selecciona DOS.)",
    "o": [
-    "Establecer conectividad segura entre redes on-premises y servicios de AWS",
+    "Establecer conectividad segura entre redes on-premise y servicios de AWS",
     "Exponer un endpoint de servicio a los socios",
-    "Transferir grandes conjuntos de datos de on-premises a AWS con AWS Snowball Edge",
+    "Transferir grandes conjuntos de datos de on-premise a AWS con AWS Snowball Edge",
     "Crear túneles cifrados entre tu red y tus VPC o puertas de enlace de tránsito"
    ],
    "e": ""
@@ -5547,7 +5547,7 @@ const BILINGUAL_BANK = [
  {
   "t": "Generative AI Architect",
   "es": {
-   "q": "Una empresa quiere conectar de forma segura su centro de datos on-premises a los servicios de AWS sin exponer el tráfico a la internet pública. AWS PrivateLink PROBABLEMENTE proporciona la conectividad requerida.",
+   "q": "Una empresa quiere conectar de forma segura su centro de datos on-premise a los servicios de AWS sin exponer el tráfico a la internet pública. AWS PrivateLink PROBABLEMENTE proporciona la conectividad requerida.",
    "o": [
     "VERDADERO",
     "FALSO"
@@ -10158,7 +10158,7 @@ const BILINGUAL_BANK = [
     "Proporciona acceso directo a internet, eliminando la necesidad de una puerta de enlace NAT.",
     "No requiere configuración ni instalación adicional.",
     "Simplifica la arquitectura de red al conectar VPC y VPN a un concentrador central.",
-    "Proporciona una conexión de red privada dedicada entre las VPC y las redes on-premises."
+    "Proporciona una conexión de red privada dedicada entre las VPC y las redes on-premise."
    ],
    "e": ""
   },
@@ -11286,7 +11286,7 @@ const BILINGUAL_BANK = [
  {
   "t": "Networking",
   "es": {
-   "q": "¿Qué servicio de AWS, además de AWS Direct Connect, se puede usar para alcanzar otros servicios de AWS compatibles con AWS PrivateLink desde una red on-premises?",
+   "q": "¿Qué servicio de AWS, además de AWS Direct Connect, se puede usar para alcanzar otros servicios de AWS compatibles con AWS PrivateLink desde una red on-premise?",
    "o": [
     "AWS Site-to-Site VPN",
     "Amazon Virtual Private Cloud (Amazon VPC)",
@@ -11338,9 +11338,9 @@ const BILINGUAL_BANK = [
   "es": {
    "q": "¿Cuál es la mejor descripción de una tabla de rutas de AWS Transit Gateway?",
    "o": [
-    "Una colección de reglas usadas para controlar el enrutamiento del tráfico entre VPC y redes on-premises",
+    "Una colección de reglas usadas para controlar el enrutamiento del tráfico entre VPC y redes on-premise",
     "Un conjunto de políticas que determinan cómo fluye el tráfico dentro de una VPC",
-    "Una configuración que habilita una conexión VPN entre una red on-premises y AWS",
+    "Una configuración que habilita una conexión VPN entre una red on-premise y AWS",
     "Un mecanismo usado para controlar el enrutamiento del tráfico entre diferentes adjuntos conectados a una puerta de enlace de tránsito"
    ],
    "e": ""
@@ -11441,7 +11441,7 @@ const BILINGUAL_BANK = [
     "Comunicarse entre VPC en AWS",
     "Comunicarse entre una red remota y VPC en AWS",
     "Comunicación entre AWS e internet",
-    "Comunicación entre internet y ubicaciones on-premises"
+    "Comunicación entre internet y ubicaciones on-premise"
    ],
    "e": ""
   },
@@ -11486,7 +11486,7 @@ const BILINGUAL_BANK = [
  {
   "t": "Networking",
   "es": {
-   "q": "¿Qué recurso proporciona una conexión entre un centro de datos on-premises o una oficina sucursal y los recursos de la nube de AWS?",
+   "q": "¿Qué recurso proporciona una conexión entre un centro de datos on-premise o una oficina sucursal y los recursos de la nube de AWS?",
    "o": [
     "Una red privada virtual (VPN)",
     "Una nube privada virtual (VPC)",
@@ -13677,7 +13677,7 @@ const BILINGUAL_BANK = [
    "o": [
     "Proteger los datos en reposo",
     "Proteger los datos en tránsito",
-    "Proteger los datos on-premises"
+    "Proteger los datos on-premise"
    ],
    "e": ""
   },
@@ -13828,7 +13828,7 @@ const BILINGUAL_BANK = [
  {
   "t": "Security",
   "es": {
-   "q": "El documento de AWS Systems Manager Run Command, AWS-InstallCloudWatchAgent, se puede usar para instalar el agente de Amazon CloudWatch en instancias de Amazon EC2 y servidores on-premises.",
+   "q": "El documento de AWS Systems Manager Run Command, AWS-InstallCloudWatchAgent, se puede usar para instalar el agente de Amazon CloudWatch en instancias de Amazon EC2 y servidores on-premise.",
    "o": [
     "VERDADERO",
     "FALSO"
@@ -16177,7 +16177,7 @@ const BILINGUAL_BANK = [
    "o": [
     "Aplicaciones serverless",
     "Aplicaciones basadas en servidores",
-    "Aplicaciones on-premises"
+    "Aplicaciones on-premise"
    ],
    "e": ""
   },
@@ -19462,7 +19462,7 @@ const BILINGUAL_BANK = [
     "Nube",
     "Socio",
     "Híbrido",
-    "On-premises"
+    "On-premise"
    ],
    "e": ""
   },
